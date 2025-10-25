@@ -1,0 +1,34 @@
+{
+  "timestamp": "2025-10-25T13:09:51.298790",
+  "overall_status": "1/5 tests passed",
+  "test_results": {
+    "dependencies": {
+      "networkx": "\u2705 Installed",
+      "osmnx": "\u2705 Installed",
+      "geopandas": "\u2705 Installed",
+      "shapely": "\u2705 Installed",
+      "rtree": "\u2705 Installed",
+      "folium": "\u2705 Installed",
+      "plotly": "\u2705 Installed"
+    },
+    "road_network": {
+      "status": "\u274c Failed",
+      "error": "graph_from_bbox() takes 1 positional argument but 4 positional arguments (and 2 keyword-only arguments) were given"
+    },
+    "spatial_database": {
+      "status": "\u2705 Success",
+      "connection": "\u2705",
+      "tables": "\u2705",
+      "spatial_queries": "\u26a0\ufe0f No data"
+    },
+    "basic_routing": {
+      "status": "\u274c Failed",
+      "error": "Network not loaded. Call download_berkeley_network() first."
+    },
+    "crime_integration": {
+      "status": "\u26a0\ufe0f Limited data",
+      "crimes_available": 0,
+      "road_network_available": true
+    }
+  }
+}

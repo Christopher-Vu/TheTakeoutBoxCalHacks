@@ -1,0 +1,52 @@
+{
+  "timestamp": "2025-10-25T13:12:55.326790",
+  "overall_status": "2/4 tests passed",
+  "test_results": {
+    "basic_dependencies": {
+      "sqlalchemy": "\u2705 Installed",
+      "pandas": "\u2705 Installed",
+      "numpy": "\u2705 Installed",
+      "requests": "\u2705 Installed",
+      "fastapi": "\u2705 Installed",
+      "uvicorn": "\u2705 Installed",
+      "aiohttp": "\u2705 Installed"
+    },
+    "database_connection": {
+      "status": "\u2705 Success",
+      "connection": "\u2705",
+      "tables": "\u2705"
+    },
+    "crime_data": {
+      "status": "\u26a0\ufe0f No data",
+      "total_crimes": 0,
+      "valid_crimes": 0
+    },
+    "basic_routing": {
+      "status": "\u2705 Success (Mock)",
+      "start": [
+        37.8726,
+        -122.2605
+      ],
+      "end": [
+        37.8703,
+        -122.2705
+      ],
+      "distance_meters": 1138.9811631458872,
+      "estimated_time_minutes": 68.33886978875324,
+      "route_path": [
+        [
+          37.8726,
+          -122.2605
+        ],
+        [
+          37.871449999999996,
+          -122.2655
+        ],
+        [
+          37.8703,
+          -122.2705
+        ]
+      ]
+    }
+  }
+}

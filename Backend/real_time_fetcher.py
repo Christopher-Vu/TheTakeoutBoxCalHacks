@@ -14,7 +14,7 @@ from dataclasses import dataclass
 
 from data_sources_config import CRIME_DATA_SOURCES, API_ENDPOINTS, RATE_LIMITS
 from database import db_manager
-from data_cleaner import data_cleaner
+from scraper.data_cleaner import data_cleaner
 
 logger = logging.getLogger(__name__)
 
@@ -98,31 +98,46 @@ class RealTimeFetcher:
             # Process and clean data
             cleaned_data = data_cleaner.clean_crime_data(data, source_name)
             
-            # Store in database
+            # Store in database with batch processing for large datasets
             stored_count = 0
-            for crime in cleaned_data:
-                if not crime.is_duplicate:
-                    crime_dict = {
-                        'id': f"{source_name}_{crime.source_id}",
-                        'source_id': crime.source_id,
-                        'source': source_name,
-                        'crime_type': crime.crime_type,
-                        'severity': crime.severity,
-                        'description': crime.description,
-                        'address': crime.address,
-                        'lat': crime.lat,
-                        'lng': crime.lng,
-                        'occurred_at': crime.occurred_at,
-                        'agency': crime.agency,
-                        'case_number': crime.case_number,
-                        'raw_data': data[0] if data else {}
-                    }
-                    
-                    try:
-                        db_manager.add_crime_report(crime_dict)
-                        stored_count += 1
-                    except Exception as e:
-                        logger.error(f"Failed to store crime record: {e}")
+            batch_size = 1000  # Process in batches to avoid memory issues
+            total_records = len(cleaned_data)
+            
+            logger.info(f"Processing {total_records} records in batches of {batch_size}")
+            
+            for i in range(0, total_records, batch_size):
+                batch = cleaned_data[i:i + batch_size]
+                batch_stored = 0
+                
+                for crime in batch:
+                    if not crime.is_duplicate:
+                        crime_dict = {
+                            'id': f"{source_name}_{crime.source_id}",
+                            'source_id': crime.source_id,
+                            'source': source_name,
+                            'crime_type': crime.crime_type,
+                            'severity': crime.severity,
+                            'description': crime.description,
+                            'address': crime.address,
+                            'lat': crime.lat,
+                            'lng': crime.lng,
+                            'occurred_at': crime.occurred_at,
+                            'agency': crime.agency,
+                            'case_number': crime.case_number,
+                            'raw_data': data[0] if data else {}
+                        }
+                        
+                        try:
+                            db_manager.add_crime_report(crime_dict)
+                            batch_stored += 1
+                            stored_count += 1
+                        except Exception as e:
+                            logger.error(f"Failed to store crime record: {e}")
+                
+                logger.info(f"Batch {i//batch_size + 1}: Stored {batch_stored} records (total: {stored_count})")
+                
+                # Small delay between batches to avoid overwhelming the database
+                await asyncio.sleep(0.01)
             
             # Update rate limiting
             self._update_rate_limit(source_name, config)
@@ -151,38 +166,94 @@ class RealTimeFetcher:
     
     
     async def _fetch_sf_police(self, config) -> List[Dict]:
-        """Fetch data from San Francisco Police Department API"""
-        url = f"{config.base_url}{API_ENDPOINTS['sf_police']['incidents']}"
+        """Fetch data from San Francisco Police Department API with pagination"""
+        all_processed_data = []
+        offset = 0
+        limit = 5000  # Maximum allowed by API
+        total_fetched = 0
+        max_records = 10000  # TEST LIMIT: Only fetch 10,000 records for testing
         
-        async with self.session.get(url) as response:
-            if response.status == 200:
-                data = await response.json()
-                # Process SF Police data format
-                processed_data = []
-                for record in data.get("data", []):
-                    if len(record) >= 35:  # Ensure we have enough fields
-                        # Extract relevant fields based on the analysis
-                        processed_data.append({
-                            "id": record[15] if record[15] else f"sf_{len(processed_data)}",  # Incident ID
-                            "type": record[22] if record[22] else "Unknown",  # Incident Category
-                            "subcategory": record[23] if record[23] else "Unknown",  # Incident Subcategory
-                            "description": record[24] if record[24] else "",  # Incident Description
-                            "address": record[26] if record[26] else "",  # Intersection
-                            "lat": float(record[32]) if record[32] and str(record[32]).replace('.', '').replace('-', '').isdigit() else None,  # Latitude
-                            "lng": float(record[33]) if record[33] and str(record[33]).replace('.', '').replace('-', '').isdigit() else None,  # Longitude
-                            "date": record[9] if record[9] else "",  # Incident Datetime
-                            "time": record[11] if record[11] else "",  # Incident Time
-                            "agency": "San Francisco Police Department",
-                            "case_number": record[16] if record[16] else None,  # Incident Number
-                            "police_district": record[28] if record[28] else None,  # Police District
-                            "neighborhood": record[29] if record[29] else None,  # Analysis Neighborhood
-                            "resolution": record[25] if record[25] else None,  # Resolution
-                            "raw_data": record
-                        })
-                return processed_data
-            else:
-                logger.error(f"SF Police API error: {response.status}")
-                return []
+        logger.info("Starting paginated fetch from SF Police API (TEST MODE: 10,000 records max)...")
+        
+        while total_fetched < max_records:
+            # Build URL with pagination parameters
+            url = f"{config.base_url}{API_ENDPOINTS['sf_police']['incidents']}?$limit={limit}&$offset={offset}"
+            
+            logger.info(f"Fetching records {offset} to {offset + limit}...")
+            
+            async with self.session.get(url) as response:
+                if response.status == 200:
+                    data = await response.json()
+                    
+                    # If no more data, break the loop
+                    if not data or len(data) == 0:
+                        logger.info("No more data available, pagination complete")
+                        break
+                    
+                    # Process SF Police data format - direct array of objects
+                    processed_data = []
+                    for record in data:
+                        try:
+                            # Extract fields using actual API response structure
+                            processed_data.append({
+                                "id": record.get("incident_id", f"sf_{len(all_processed_data) + len(processed_data)}"),
+                                "type": record.get("incident_category", "Unknown"),
+                                "subcategory": record.get("incident_subcategory", "Unknown"),
+                                "description": record.get("incident_description", ""),
+                                "address": record.get("intersection", ""),
+                                "lat": self._safe_float(record.get("latitude")),
+                                "lng": self._safe_float(record.get("longitude")),
+                                "date": record.get("incident_datetime", ""),  # Use full datetime for parsing
+                                "time": "",  # Empty since we're using full datetime
+                                "datetime": record.get("incident_datetime", ""),
+                                "agency": "San Francisco Police Department",
+                                "case_number": record.get("incident_number", None),
+                                "police_district": record.get("police_district", None),
+                                "neighborhood": record.get("analysis_neighborhood", None),
+                                "resolution": record.get("resolution", None),
+                                "point": record.get("point", None),  # PostGIS geometry
+                                "raw_data": record
+                            })
+                        except Exception as e:
+                            logger.warning(f"Failed to process record: {e}")
+                            continue
+                    
+                    all_processed_data.extend(processed_data)
+                    total_fetched += len(processed_data)
+                    
+                    logger.info(f"Fetched {len(processed_data)} records (total: {total_fetched})")
+                    
+                    # Check if we've reached our test limit
+                    if total_fetched >= max_records:
+                        logger.info(f"Reached test limit of {max_records} records")
+                        break
+                    
+                    # If we got fewer records than the limit, we've reached the end
+                    if len(processed_data) < limit:
+                        logger.info("Reached end of data (fewer records than limit)")
+                        break
+                    
+                    # Move to next page
+                    offset += limit
+                    
+                    # Add a small delay to be respectful to the API
+                    await asyncio.sleep(0.1)
+                    
+                else:
+                    logger.error(f"SF Police API error: {response.status}")
+                    break
+        
+        logger.info(f"Pagination complete. Total records fetched: {total_fetched}")
+        return all_processed_data
+    
+    def _safe_float(self, value):
+        """Safely convert value to float"""
+        if value is None or value == "":
+            return None
+        try:
+            return float(value)
+        except (ValueError, TypeError):
+            return None
     
     def _can_fetch(self, source_name: str, config) -> bool:
         """Check if we can fetch from this source (rate limiting)"""

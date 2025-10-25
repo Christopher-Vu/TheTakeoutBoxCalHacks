@@ -1,0 +1,191 @@
+{
+  "total_records": 10,
+  "records_with_coordinates": 8,
+  "records_without_coordinates": 2,
+  "datetime_issues": 10,
+  "geocoding_issues": 0,
+  "sample_records": [
+    {
+      "source": "sf_police",
+      "record": {
+        "id": "1507505",
+        "type": "Recovered Vehicle",
+        "subcategory": "Recovered Vehicle",
+        "description": "Vehicle, Recovered, Auto",
+        "address": "",
+        "lat": null,
+        "lng": null,
+        "date": "2025-08-26T00:00:00.000",
+        "time": "23:17",
+        "datetime": "2025-08-26T23:17:00.000",
+        "agency": "San Francisco Police Department",
+        "case_number": "250333102",
+        "police_district": "Out of SF",
+        "neighborhood": null,
+        "resolution": "Open or Active",
+        "point": null,
+        "raw_data": {
+          "row_id": "150750507041",
+          "incident_datetime": "2025-08-26T23:17:00.000",
+          "incident_date": "2025-08-26T00:00:00.000",
+          "incident_time": "23:17",
+          "incident_year": "2025",
+          "incident_day_of_week": "Tuesday",
+          "report_datetime": "2025-08-26T23:17:00.000",
+          "incident_id": "1507505",
+          "incident_number": "250333102",
+          "report_type_code": "VS",
+          "report_type_description": "Vehicle Supplement",
+          "incident_code": "07041",
+          "incident_category": "Recovered Vehicle",
+          "incident_subcategory": "Recovered Vehicle",
+          "incident_description": "Vehicle, Recovered, Auto",
+          "resolution": "Open or Active",
+          "police_district": "Out of SF",
+          "data_as_of": "2025-08-28T09:38:07.000",
+          "data_loaded_at": "2025-08-29T09:53:03.000"
+        }
+      },
+      "has_coordinates": false,
+      "datetime_issue": true
+    },
+    {
+      "source": "sf_police",
+      "record": {
+        "id": "1507521",
+        "type": "Assault",
+        "subcategory": "Simple Assault",
+        "description": "Battery",
+        "address": "EWING TER \\ JEAN WAY",
+        "lat": 37.78041458129883,
+        "lng": -122.44901275634766,
+        "date": "2025-08-27T00:00:00.000",
+        "time": "00:37",
+        "datetime": "2025-08-27T00:37:00.000",
+        "agency": "San Francisco Police Department",
+        "case_number": "250479881",
+        "police_district": "Park",
+        "neighborhood": "Lone Mountain/USF",
+        "resolution": "Open or Active",
+        "point": {
+          "type": "Point",
+          "coordinates": [
+            -122.449012756,
+            37.780414581
+          ]
+        },
+        "raw_data": {
+          "row_id": "150752104134",
+          "incident_datetime": "2025-08-27T00:37:00.000",
+          "incident_date": "2025-08-27T00:00:00.000",
+          "incident_time": "00:37",
+          "incident_year": "2025",
+          "incident_day_of_week": "Wednesday",
+          "report_datetime": "2025-08-27T00:37:00.000",
+          "incident_id": "1507521",
+          "incident_number": "250479881",
+          "cad_number": "252390049",
+          "report_type_code": "II",
+          "report_type_description": "Initial",
+          "incident_code": "04134",
+          "incident_category": "Assault",
+          "incident_subcategory": "Simple Assault",
+          "incident_description": "Battery",
+          "resolution": "Open or Active",
+          "intersection": "EWING TER \\ JEAN WAY",
+          "cnn": "33557000",
+          "police_district": "Park",
+          "analysis_neighborhood": "Lone Mountain/USF",
+          "supervisor_district": "1",
+          "supervisor_district_2012": "1",
+          "latitude": "37.78041458129883",
+          "longitude": "-122.44901275634766",
+          "point": {
+            "type": "Point",
+            "coordinates": [
+              -122.449012756,
+              37.780414581
+            ]
+          },
+          "data_as_of": "2025-08-28T09:38:07.000",
+          "data_loaded_at": "2025-08-29T09:53:03.000",
+          ":@computed_region_jwn9_ihcz": "12",
+          ":@computed_region_26cr_cadq": "4",
+          ":@computed_region_qgnn_b9vv": "7"
+        }
+      },
+      "has_coordinates": true,
+      "datetime_issue": true
+    },
+    {
+      "source": "sf_police",
+      "record": {
+        "id": "1507623",
+        "type": "Fraud",
+        "subcategory": "Fraud",
+        "description": "False Personation",
+        "address": "COLE ST \\ FULTON ST",
+        "lat": 37.775177001953125,
+        "lng": -122.45135498046875,
+        "date": "2025-07-17T00:00:00.000",
+        "time": "15:00",
+        "datetime": "2025-07-17T15:00:00.000",
+        "agency": "San Francisco Police Department",
+        "case_number": "250480775",
+        "police_district": "Park",
+        "neighborhood": "Lone Mountain/USF",
+        "resolution": "Open or Active",
+        "point": {
+          "type": "Point",
+          "coordinates": [
+            -122.45135498,
+            37.775177002
+          ]
+        },
+        "raw_data": {
+          "row_id": "150762309027",
+          "incident_datetime": "2025-07-17T15:00:00.000",
+          "incident_date": "2025-07-17T00:00:00.000",
+          "incident_time": "15:00",
+          "incident_year": "2025",
+          "incident_day_of_week": "Thursday",
+          "report_datetime": "2025-08-27T11:55:00.000",
+          "incident_id": "1507623",
+          "incident_number": "250480775",
+          "cad_number": "252391585",
+          "report_type_code": "II",
+          "report_type_description": "Initial",
+          "incident_code": "09027",
+          "incident_category": "Fraud",
+          "incident_subcategory": "Fraud",
+          "incident_description": "False Personation",
+          "resolution": "Open or Active",
+          "intersection": "COLE ST \\ FULTON ST",
+          "cnn": "26469000",
+          "police_district": "Park",
+          "analysis_neighborhood": "Lone Mountain/USF",
+          "supervisor_district": "1",
+          "supervisor_district_2012": "1",
+          "latitude": "37.775177001953125",
+          "longitude": "-122.45135498046875",
+          "point": {
+            "type": "Point",
+            "coordinates": [
+              -122.45135498,
+              37.775177002
+            ]
+          },
+          "data_as_of": "2025-08-28T09:38:07.000",
+          "data_loaded_at": "2025-08-29T09:53:03.000",
+          ":@computed_region_jwn9_ihcz": "12",
+          ":@computed_region_26cr_cadq": "4",
+          ":@computed_region_qgnn_b9vv": "7"
+        }
+      },
+      "has_coordinates": true,
+      "datetime_issue": true
+    }
+  ],
+  "coordinate_analysis": {},
+  "datetime_analysis": {}
+}

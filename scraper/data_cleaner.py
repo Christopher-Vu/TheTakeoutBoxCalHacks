@@ -11,7 +11,7 @@ from typing import List, Dict, Optional, Tuple
 from dataclasses import dataclass
 from difflib import SequenceMatcher
 
-from geocoder import geocoder, GeocodingResult
+from .geocoder import geocoder, GeocodingResult
 
 logger = logging.getLogger(__name__)
 
@@ -157,8 +157,9 @@ class DataCleaner:
         # Parse date/time
         occurred_at = self._parse_datetime(record.get('date', ''), record.get('time', ''))
         if not occurred_at:
-            logger.warning(f"Could not parse datetime for record: {record}")
-            return None
+            # Use current time as fallback instead of skipping record
+            occurred_at = datetime.now()
+            logger.warning(f"Could not parse datetime for record, using current time: {record.get('id', 'unknown')}")
         
         # Geocode address if coordinates not provided
         lat, lng = self._get_coordinates(record, address)
@@ -284,6 +285,9 @@ class DataCleaner:
         
         # Common date formats
         date_formats = [
+            '%Y-%m-%dT%H:%M:%S.%f',  # ISO format with microseconds
+            '%Y-%m-%dT%H:%M:%S',  # ISO format with time
+            '%Y-%m-%d %H:%M:%S',  # ISO format with space
             '%Y-%m-%d',
             '%m/%d/%Y',
             '%m-%d-%Y',

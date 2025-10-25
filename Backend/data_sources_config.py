@@ -50,7 +50,7 @@ CRIME_DATA_SOURCES = {
 # API endpoint configurations
 API_ENDPOINTS = {
     "sf_police": {
-        "incidents": "/api/views/wg3w-h783/rows.json"
+        "incidents": "/resource/wg3w-h783.json"
     }
 }
 

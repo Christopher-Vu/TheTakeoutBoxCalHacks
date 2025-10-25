@@ -1,0 +1,61 @@
+version: '3.8'
+
+services:
+  postgres:
+    image: postgis/postgis:15-3.3
+    environment:
+      POSTGRES_DB: safepath_spatial
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: password
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  init-db:
+    build: ./backend
+    environment:
+      - DATABASE_URL=postgresql://postgres:password@postgres:5432/safepath_spatial
+    depends_on:
+      postgres:
+        condition: service_healthy
+    volumes:
+      - ./backend:/app
+      - ./scraper:/app/scraper
+    working_dir: /app
+    command: python init_database.py
+
+  scraper:
+    build: ./backend
+    environment:
+      - DATABASE_URL=postgresql://postgres:password@postgres:5432/safepath_spatial
+    depends_on:
+      init-db:
+        condition: service_completed_successfully
+    volumes:
+      - ./backend:/app
+      - ./scraper:/app/scraper
+    working_dir: /app
+    command: python -c "import asyncio; from real_time_fetcher import fetch_real_time_data; asyncio.run(fetch_real_time_data())"
+
+  app:
+    build: ./backend
+    ports:
+      - "8000:8000"
+    environment:
+      - DATABASE_URL=postgresql://postgres:password@postgres:5432/safepath_spatial
+    depends_on:
+      init-db:
+        condition: service_completed_successfully
+    volumes:
+      - ./backend:/app
+      - ./scraper:/app/scraper
+    command: uvicorn main:app --host 0.0.0.0 --port 8000 --reload
+
+volumes:
+  postgres_data:

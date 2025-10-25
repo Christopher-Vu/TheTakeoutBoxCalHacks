@@ -37,10 +37,7 @@ class CrimeReport(Base):
     
     # Location data
     address = Column(String)  # Human-readable address
-    if HAS_POSTGIS:
-        point = Column(Geometry('POINT', srid=4326))  # PostGIS geometry
-    else:
-        point = Column(Text)  # SQLite fallback - store as text
+    # point = Column(Geometry('POINT', srid=4326))  # Temporarily disabled - can be calculated later
     lat = Column(Float)
     lng = Column(Float)
     block_address = Column(String)  # Generalized address for privacy
@@ -68,7 +65,8 @@ class CrimeReport(Base):
     # Indexes for performance
     if HAS_POSTGIS:
         __table_args__ = (
-            Index('idx_crimes_point', 'point', postgresql_using='gist'),
+            # Index('idx_crimes_point', 'point', postgresql_using='gist'),  # Temporarily disabled
+            Index('idx_crimes_lat_lng', 'lat', 'lng'),
             Index('idx_crimes_occurred_at', 'occurred_at'),
             Index('idx_crimes_source', 'source'),
             Index('idx_crimes_type', 'crime_type'),
@@ -121,8 +119,8 @@ class DatabaseManager:
     
     def __init__(self, database_url: str = None):
         if database_url is None:
-            # Use SQLite for development, PostgreSQL for production
-            database_url = os.getenv('DATABASE_URL', 'sqlite:///./safepath.db')
+            # Use PostgreSQL for spatial operations
+            database_url = os.getenv('DATABASE_URL', 'postgresql://postgres:password@localhost:5432/safepath_spatial')
         
         self.engine = create_engine(database_url)
         self.SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=self.engine)
