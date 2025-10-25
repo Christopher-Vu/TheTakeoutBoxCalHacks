@@ -43,8 +43,6 @@ const RoutePlanning = () => {
   const travelModes = [
     { id: 'walking', icon: FaWalking, label: 'Walking' },
     { id: 'biking', icon: FaBicycle, label: 'Biking' },
-    { id: 'transit', icon: FaBus, label: 'Transit' },
-    { id: 'driving', icon: FaCar, label: 'Driving' }
   ];
 
   const handleFindRoutes = () => {
