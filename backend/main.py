@@ -13,10 +13,14 @@ import logging
 # Import modules that may not exist yet - handle gracefully
 try:
     from database_sqlite import db_manager, CrimeReport
+    from data_manager import data_manager
+    from incremental_sync import incremental_sync
 except ImportError:
     print("Warning: database module not found. Some features will be disabled.")
     db_manager = None
     CrimeReport = None
+    data_manager = None
+    incremental_sync = None
 
 try:
     from data_aggregator import aggregator, SourceType
@@ -358,6 +362,120 @@ async def get_sync_logs(
             }
     except Exception as e:
         logger.error(f"Error getting sync logs: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+# Data Management Endpoints
+@app.post("/data/sync")
+async def sync_data(limit: Optional[int] = None):
+    """Sync all data sources"""
+    if not data_manager:
+        raise HTTPException(status_code=503, detail="Data manager not available")
+    
+    try:
+        result = await data_manager.sync_all_data(limit)
+        return result
+    except Exception as e:
+        logger.error(f"Error syncing data: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.get("/data/statistics")
+async def get_data_statistics():
+    """Get comprehensive data statistics"""
+    if not data_manager:
+        raise HTTPException(status_code=503, detail="Data manager not available")
+    
+    try:
+        stats = data_manager.get_data_statistics()
+        return stats
+    except Exception as e:
+        logger.error(f"Error getting statistics: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.get("/data/heatmap")
+async def get_crime_heatmap(
+    min_lat: float = Query(..., description="Minimum latitude"),
+    max_lat: float = Query(..., description="Maximum latitude"),
+    min_lng: float = Query(..., description="Minimum longitude"),
+    max_lng: float = Query(..., description="Maximum longitude"),
+    grid_size: int = Query(50, description="Grid size for heatmap")
+):
+    """Get crime heatmap data for visualization"""
+    if not data_manager:
+        raise HTTPException(status_code=503, detail="Data manager not available")
+    
+    try:
+        heatmap_data = data_manager.get_crime_heatmap_data(
+            min_lat, max_lat, min_lng, max_lng, grid_size
+        )
+        return {
+            "heatmap_data": heatmap_data,
+            "bounds": {
+                "min_lat": min_lat,
+                "max_lat": max_lat,
+                "min_lng": min_lng,
+                "max_lng": max_lng
+            },
+            "grid_size": grid_size
+        }
+    except Exception as e:
+        logger.error(f"Error getting heatmap data: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.get("/data/trends")
+async def get_crime_trends(days: int = Query(30, description="Number of days to analyze")):
+    """Get crime trends over time"""
+    if not data_manager:
+        raise HTTPException(status_code=503, detail="Data manager not available")
+    
+    try:
+        trends = data_manager.get_crime_trends(days)
+        return trends
+    except Exception as e:
+        logger.error(f"Error getting trends: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.post("/data/cleanup")
+async def cleanup_old_data(days_to_keep: int = Query(365, description="Days of data to keep")):
+    """Clean up old data to manage database size"""
+    if not data_manager:
+        raise HTTPException(status_code=503, detail="Data manager not available")
+    
+    try:
+        result = data_manager.cleanup_old_data(days_to_keep)
+        return result
+    except Exception as e:
+        logger.error(f"Error cleaning up data: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+# Incremental Sync Endpoints
+@app.post("/data/sync/incremental")
+async def sync_incremental_data():
+    """Sync only new data that isn't already in the database"""
+    if not incremental_sync:
+        raise HTTPException(status_code=503, detail="Incremental sync not available")
+    
+    try:
+        result = await incremental_sync.sync_new_data()
+        return result
+    except Exception as e:
+        logger.error(f"Error in incremental sync: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.get("/data/sync/status")
+async def get_sync_status():
+    """Get current sync status and statistics"""
+    if not incremental_sync:
+        raise HTTPException(status_code=503, detail="Incremental sync not available")
+    
+    try:
+        stats = incremental_sync.get_sync_statistics()
+        return {
+            "sync_status": "available",
+            "statistics": stats,
+            "last_checked": datetime.utcnow().isoformat()
+        }
+    except Exception as e:
+        logger.error(f"Error getting sync status: {e}")
         raise HTTPException(status_code=500, detail=str(e))
 
 # Helper function for route calculation
