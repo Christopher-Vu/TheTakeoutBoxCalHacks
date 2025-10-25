@@ -93,13 +93,6 @@ const RoutePlanning = () => {
   return (
     <div className="route-planning-page">
       <aside className="route-sidebar">
-        <div className="sidebar-header">
-          <button className="btn-back" onClick={() => navigate('/')}>
-            <FaArrowLeft /> Back
-          </button>
-          <h1>Plan Your Route</h1>
-        </div>
-
         <div className="route-inputs">
           <AddressAutocomplete
             placeholder="Starting location"
