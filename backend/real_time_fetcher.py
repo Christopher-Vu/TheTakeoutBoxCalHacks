@@ -154,32 +154,29 @@ class RealTimeFetcher:
         """Fetch data from San Francisco Police Department API"""
         url = f"{config.base_url}{API_ENDPOINTS['sf_police']['incidents']}"
         
-        # Get data from last 7 days (since it updates every 24 hours)
-        end_date = datetime.utcnow()
-        start_date = end_date - timedelta(days=7)
-        
-        # Build query for last 7 days
-        query = f"SELECT * WHERE `incident_date` >= '{start_date.strftime('%Y-%m-%d')}' AND `incident_date` < '{end_date.strftime('%Y-%m-%d')}'"
-        params = {"query": query}
-        
-        async with self.session.get(url, params=params) as response:
+        async with self.session.get(url) as response:
             if response.status == 200:
                 data = await response.json()
                 # Process SF Police data format
                 processed_data = []
                 for record in data.get("data", []):
-                    if len(record) >= 10:  # Ensure we have enough fields
+                    if len(record) >= 35:  # Ensure we have enough fields
+                        # Extract relevant fields based on the analysis
                         processed_data.append({
-                            "id": record[0] if record[0] else f"sf_{len(processed_data)}",
-                            "type": record[1] if len(record) > 1 else "OTHER",
-                            "description": record[2] if len(record) > 2 else "",
-                            "address": record[3] if len(record) > 3 else "",
-                            "lat": float(record[4]) if len(record) > 4 and record[4] else None,
-                            "lng": float(record[5]) if len(record) > 5 and record[5] else None,
-                            "date": record[6] if len(record) > 6 else "",
-                            "time": record[7] if len(record) > 7 else "",
+                            "id": record[15] if record[15] else f"sf_{len(processed_data)}",  # Incident ID
+                            "type": record[22] if record[22] else "Unknown",  # Incident Category
+                            "subcategory": record[23] if record[23] else "Unknown",  # Incident Subcategory
+                            "description": record[24] if record[24] else "",  # Incident Description
+                            "address": record[26] if record[26] else "",  # Intersection
+                            "lat": float(record[32]) if record[32] and str(record[32]).replace('.', '').replace('-', '').isdigit() else None,  # Latitude
+                            "lng": float(record[33]) if record[33] and str(record[33]).replace('.', '').replace('-', '').isdigit() else None,  # Longitude
+                            "date": record[9] if record[9] else "",  # Incident Datetime
+                            "time": record[11] if record[11] else "",  # Incident Time
                             "agency": "San Francisco Police Department",
-                            "case_number": record[8] if len(record) > 8 else None,
+                            "case_number": record[16] if record[16] else None,  # Incident Number
+                            "police_district": record[28] if record[28] else None,  # Police District
+                            "neighborhood": record[29] if record[29] else None,  # Analysis Neighborhood
+                            "resolution": record[25] if record[25] else None,  # Resolution
                             "raw_data": record
                         })
                 return processed_data
