@@ -1,19 +1,15 @@
-/* Root variables for glow colors */
-:root {
-  --glow-blue: #0066CC;
-  --glow-purple: #6B46C1;
-  --glow-teal: #00AA88;
-  --glow-gold: #FFD700;
-  --dark-navy: #0a1628;
-}
-
 /* Landing Page Container */
 .landing-page {
   position: relative;
   width: 100%;
   overflow-x: hidden;
-  overflow-y: auto;
   scroll-behavior: smooth;
+  /* Local CSS variables scoped to landing page only */
+  --glow-blue: #0066CC;
+  --glow-purple: #6B46C1;
+  --glow-teal: #00AA88;
+  --glow-gold: #FFD700;
+  --dark-navy: #0a1628;
 }
 
 /* Fixed Hero Section */
