@@ -1,1 +1,0 @@
-# Scraper functionality tests
