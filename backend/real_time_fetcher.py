@@ -100,6 +100,8 @@ class RealTimeFetcher:
                 data = await self._fetch_community_crime_map(config)
             elif source_name == "ucpd":
                 data = await self._fetch_ucpd(config)
+            elif source_name == "sf_police":
+                data = await self._fetch_sf_police(config)
             else:
                 raise ValueError(f"Unknown source: {source_name}")
             
@@ -236,6 +238,43 @@ class RealTimeFetcher:
         # For now, return empty list
         logger.info("UCPD scraping not implemented yet")
         return []
+    
+    async def _fetch_sf_police(self, config) -> List[Dict]:
+        """Fetch data from San Francisco Police Department API"""
+        url = f"{config.base_url}{API_ENDPOINTS['sf_police']['incidents']}"
+        
+        # Get data from last 7 days (since it updates every 24 hours)
+        end_date = datetime.utcnow()
+        start_date = end_date - timedelta(days=7)
+        
+        # Build query for last 7 days
+        query = f"SELECT * WHERE `incident_date` >= '{start_date.strftime('%Y-%m-%d')}' AND `incident_date` < '{end_date.strftime('%Y-%m-%d')}'"
+        params = {"query": query}
+        
+        async with self.session.get(url, params=params) as response:
+            if response.status == 200:
+                data = await response.json()
+                # Process SF Police data format
+                processed_data = []
+                for record in data.get("data", []):
+                    if len(record) >= 10:  # Ensure we have enough fields
+                        processed_data.append({
+                            "id": record[0] if record[0] else f"sf_{len(processed_data)}",
+                            "type": record[1] if len(record) > 1 else "OTHER",
+                            "description": record[2] if len(record) > 2 else "",
+                            "address": record[3] if len(record) > 3 else "",
+                            "lat": float(record[4]) if len(record) > 4 and record[4] else None,
+                            "lng": float(record[5]) if len(record) > 5 and record[5] else None,
+                            "date": record[6] if len(record) > 6 else "",
+                            "time": record[7] if len(record) > 7 else "",
+                            "agency": "San Francisco Police Department",
+                            "case_number": record[8] if len(record) > 8 else None,
+                            "raw_data": record
+                        })
+                return processed_data
+            else:
+                logger.error(f"SF Police API error: {response.status}")
+                return []
     
     def _can_fetch(self, source_name: str, config) -> bool:
         """Check if we can fetch from this source (rate limiting)"""

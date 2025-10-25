@@ -105,6 +105,22 @@ CRIME_DATA_SOURCES = {
             "SEXUAL_ASSAULT", "WEAPON_OFFENSE", "DRUG_OFFENSE", "VANDALISM"
         ],
         description="UC Berkeley Police Department crime log"
+    ),
+    
+    "sf_police": DataSourceConfig(
+        name="San Francisco Police Department",
+        source_type=DataSourceType.API,
+        base_url="https://data.sfgov.org",
+        rate_limit=100,
+        update_frequency=1440,  # 24 hours (as specified)
+        priority=1,
+        coverage_area={"type": "city", "name": "San Francisco", "state": "CA"},
+        categories=[
+            "ROBBERY", "ASSAULT", "BURGLARY", "THEFT", "AUTO_THEFT",
+            "SEXUAL_ASSAULT", "WEAPON_OFFENSE", "DRUG_OFFENSE", "VANDALISM",
+            "FRAUD", "EMBEZZLEMENT", "FORGERY", "ARSON", "HOMICIDE"
+        ],
+        description="San Francisco Police Department incident reports - updates every 24 hours"
     )
 }
 
@@ -123,6 +139,9 @@ API_ENDPOINTS = {
         "offenses": "/offenses",
         "agencies": "/agencies",
         "counts": "/counts"
+    },
+    "sf_police": {
+        "incidents": "/api/v3/views/wg3w-h783/query.json"
     }
 }
 
