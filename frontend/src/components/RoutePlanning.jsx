@@ -2,7 +2,6 @@ import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import {
   FaArrowLeft,
-  FaMapMarkerAlt,
   FaWalking,
   FaBicycle,
   FaBus,
@@ -25,12 +24,15 @@ import {
   getSafetyScoreColor,
   getSafetyScoreLabel
 } from '../utils/mockData';
+import AddressAutocomplete from './AddressAutocomplete';
 import './RoutePlanning.css';
 
 const RoutePlanning = () => {
   const navigate = useNavigate();
   const [origin, setOrigin] = useState('');
   const [destination, setDestination] = useState('');
+  const [selectedOrigin, setSelectedOrigin] = useState(null);
+  const [selectedDestination, setSelectedDestination] = useState(null);
   const [travelMode, setTravelMode] = useState('walking');
   const [routes, setRoutes] = useState([]);
   const [selectedRoute, setSelectedRoute] = useState(null);
@@ -46,17 +48,27 @@ const RoutePlanning = () => {
   ];
 
   const handleFindRoutes = () => {
-    if (!origin || !destination) return;
+    if (!selectedOrigin || !selectedDestination) return;
 
     setIsSearching(true);
     // Simulate API call
     setTimeout(() => {
-      const mockRoutes = generateMockRoutes(origin, destination, travelMode);
+      const mockRoutes = generateMockRoutes(selectedOrigin.name, selectedDestination.name, travelMode);
       setRoutes(mockRoutes);
       setSelectedRoute(null);
       setDirections([]);
       setIsSearching(false);
     }, 1000);
+  };
+
+  const handleOriginSelect = (location) => {
+    setSelectedOrigin(location);
+    setOrigin(location.name);
+  };
+
+  const handleDestinationSelect = (location) => {
+    setSelectedDestination(location);
+    setDestination(location.name);
   };
 
   const handleSelectRoute = (route) => {
@@ -91,31 +103,21 @@ const RoutePlanning = () => {
         </div>
 
         <div className="route-inputs">
-          <div className="input-group">
-            <div className="input-icon origin-icon">
-              <div className="icon-dot"></div>
-            </div>
-            <input
-              type="text"
-              className="input location-input"
-              placeholder="Starting location"
-              value={origin}
-              onChange={(e) => setOrigin(e.target.value)}
-            />
-          </div>
+          <AddressAutocomplete
+            placeholder="Starting location"
+            value={origin}
+            onChange={setOrigin}
+            onSelect={handleOriginSelect}
+            className="origin-autocomplete"
+          />
 
-          <div className="input-group">
-            <div className="input-icon destination-icon">
-              <FaMapMarkerAlt />
-            </div>
-            <input
-              type="text"
-              className="input location-input"
-              placeholder="Destination"
-              value={destination}
-              onChange={(e) => setDestination(e.target.value)}
-            />
-          </div>
+          <AddressAutocomplete
+            placeholder="Destination"
+            value={destination}
+            onChange={setDestination}
+            onSelect={handleDestinationSelect}
+            className="destination-autocomplete"
+          />
         </div>
 
         <div className="travel-modes">
@@ -137,7 +139,7 @@ const RoutePlanning = () => {
         <button
           className="btn btn-primary btn-lg find-routes-btn"
           onClick={handleFindRoutes}
-          disabled={!origin || !destination || isSearching}
+          disabled={!selectedOrigin || !selectedDestination || isSearching}
         >
           <FaSearch />
           {isSearching ? 'Searching...' : 'Find Routes'}
