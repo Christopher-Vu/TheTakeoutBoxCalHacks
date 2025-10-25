@@ -89,18 +89,8 @@ class RealTimeFetcher:
             )
         
         try:
-            # Fetch data based on source type
-            if source_name == "crimeometer":
-                data = await self._fetch_crimeometer(config)
-            elif source_name == "berkeley_pd":
-                data = await self._fetch_berkeley_pd(config)
-            elif source_name == "fbi_ucr":
-                data = await self._fetch_fbi_ucr(config)
-            elif source_name == "community_crime_map":
-                data = await self._fetch_community_crime_map(config)
-            elif source_name == "ucpd":
-                data = await self._fetch_ucpd(config)
-            elif source_name == "sf_police":
+            # Fetch data from San Francisco Police Department
+            if source_name == "sf_police":
                 data = await self._fetch_sf_police(config)
             else:
                 raise ValueError(f"Unknown source: {source_name}")
@@ -159,85 +149,6 @@ class RealTimeFetcher:
                 next_fetch=datetime.utcnow() + timedelta(minutes=config.update_frequency)
             )
     
-    async def _fetch_crimeometer(self, config) -> List[Dict]:
-        """Fetch data from CrimeoMeter API"""
-        if not config.api_key:
-            logger.warning("CrimeoMeter API key not configured")
-            return []
-        
-        url = f"{config.base_url}{API_ENDPOINTS['crimeometer']['incidents']}"
-        headers = {"X-API-Key": config.api_key}
-        
-        # Berkeley area parameters
-        params = {
-            "lat": 37.8719,
-            "lng": -122.2585,
-            "radius": 5000,  # 5km radius
-            "days_back": 7
-        }
-        
-        async with self.session.get(url, headers=headers, params=params) as response:
-            if response.status == 200:
-                data = await response.json()
-                return data.get("incidents", [])
-            else:
-                logger.error(f"CrimeoMeter API error: {response.status}")
-                return []
-    
-    async def _fetch_berkeley_pd(self, config) -> List[Dict]:
-        """Fetch data from Berkeley PD Open Data"""
-        url = f"{config.base_url}{API_ENDPOINTS['berkeley_pd']['calls_for_service']}"
-        
-        async with self.session.get(url) as response:
-            if response.status == 200:
-                data = await response.json()
-                # Process Berkeley PD data format
-                processed_data = []
-                for record in data.get("data", []):
-                    if len(record) >= 8:  # Ensure we have enough fields
-                        processed_data.append({
-                            "id": record[0],
-                            "type": record[1],
-                            "description": record[2],
-                            "address": record[3],
-                            "lat": float(record[4]) if record[4] else None,
-                            "lng": float(record[5]) if record[5] else None,
-                            "date": record[6],
-                            "time": record[7] if len(record) > 7 else "",
-                            "agency": "Berkeley PD"
-                        })
-                return processed_data
-            else:
-                logger.error(f"Berkeley PD API error: {response.status}")
-                return []
-    
-    async def _fetch_fbi_ucr(self, config) -> List[Dict]:
-        """Fetch data from FBI UCR API"""
-        # FBI data is annual, not real-time
-        # This would be used for historical context
-        url = f"{config.base_url}{API_ENDPOINTS['fbi_ucr']['offenses']}"
-        
-        async with self.session.get(url) as response:
-            if response.status == 200:
-                data = await response.json()
-                return data.get("offenses", [])
-            else:
-                logger.error(f"FBI UCR API error: {response.status}")
-                return []
-    
-    async def _fetch_community_crime_map(self, config) -> List[Dict]:
-        """Fetch data from CommunityCrimeMap (scraping)"""
-        # This would integrate with your existing scraper
-        # For now, return empty list
-        logger.info("CommunityCrimeMap scraping not implemented yet")
-        return []
-    
-    async def _fetch_ucpd(self, config) -> List[Dict]:
-        """Fetch data from UCPD crime log"""
-        # This would integrate with UCPD scraping
-        # For now, return empty list
-        logger.info("UCPD scraping not implemented yet")
-        return []
     
     async def _fetch_sf_police(self, config) -> List[Dict]:
         """Fetch data from San Francisco Police Department API"""

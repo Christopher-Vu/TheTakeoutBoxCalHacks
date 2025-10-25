@@ -28,85 +28,8 @@ class DataSourceConfig:
     categories: List[str] = None
     description: str = ""
 
-# Real-time crime data sources
+# San Francisco Police Department - Primary Data Source
 CRIME_DATA_SOURCES = {
-    "crimeometer": DataSourceConfig(
-        name="CrimeoMeter API",
-        source_type=DataSourceType.API,
-        base_url="https://api.crimeometer.com",
-        api_key=os.getenv("CRIMEOMETER_API_KEY"),
-        rate_limit=1000,
-        update_frequency=15,  # 15 minutes
-        priority=1,
-        coverage_area={"type": "city", "name": "Berkeley", "state": "CA"},
-        categories=[
-            "ROBBERY", "ASSAULT", "BURGLARY", "THEFT", "AUTO_THEFT",
-            "SEXUAL_ASSAULT", "WEAPON_OFFENSE", "DRUG_OFFENSE", "VANDALISM"
-        ],
-        description="Comprehensive real-time crime data for 700+ U.S. cities"
-    ),
-    
-    "berkeley_pd": DataSourceConfig(
-        name="Berkeley PD Open Data",
-        source_type=DataSourceType.API,
-        base_url="https://data.cityofberkeley.info",
-        rate_limit=100,
-        update_frequency=60,  # 1 hour
-        priority=2,
-        coverage_area={"type": "city", "name": "Berkeley", "state": "CA"},
-        categories=[
-            "ROBBERY", "ASSAULT", "BURGLARY", "THEFT", "AUTO_THEFT",
-            "SEXUAL_ASSAULT", "WEAPON_OFFENSE", "DRUG_OFFENSE", "VANDALISM",
-            "FRAUD", "EMBEZZLEMENT", "FORGERY", "ARSON"
-        ],
-        description="Official Berkeley Police Department data"
-    ),
-    
-    "fbi_ucr": DataSourceConfig(
-        name="FBI Crime Data API",
-        source_type=DataSourceType.API,
-        base_url="https://api.usa.gov/crime/fbi",
-        rate_limit=1000,
-        update_frequency=1440,  # 24 hours (annual data)
-        priority=3,
-        coverage_area={"type": "national", "name": "United States"},
-        categories=[
-            "HOMICIDE", "RAPE", "ROBBERY", "ASSAULT", "BURGLARY",
-            "LARCENY", "AUTO_THEFT", "ARSON"
-        ],
-        description="FBI Uniform Crime Reporting data"
-    ),
-    
-    "community_crime_map": DataSourceConfig(
-        name="CommunityCrimeMap Scraper",
-        source_type=DataSourceType.SCRAPER,
-        base_url="https://communitycrimemap.com",
-        rate_limit=10,
-        update_frequency=30,
-        priority=2,
-        coverage_area={"type": "city", "name": "Berkeley", "state": "CA"},
-        categories=[
-            "ROBBERY", "ASSAULT", "BURGLARY", "THEFT", "AUTO_THEFT",
-            "SEXUAL_ASSAULT", "WEAPON_OFFENSE", "DRUG_OFFENSE", "VANDALISM"
-        ],
-        description="Scraped data from CommunityCrimeMap.com"
-    ),
-    
-    "ucpd": DataSourceConfig(
-        name="UCPD Crime Log",
-        source_type=DataSourceType.SCRAPER,
-        base_url="https://police.berkeley.edu",
-        rate_limit=5,
-        update_frequency=120,  # 2 hours
-        priority=2,
-        coverage_area={"type": "campus", "name": "UC Berkeley"},
-        categories=[
-            "ROBBERY", "ASSAULT", "BURGLARY", "THEFT", "AUTO_THEFT",
-            "SEXUAL_ASSAULT", "WEAPON_OFFENSE", "DRUG_OFFENSE", "VANDALISM"
-        ],
-        description="UC Berkeley Police Department crime log"
-    ),
-    
     "sf_police": DataSourceConfig(
         name="San Francisco Police Department",
         source_type=DataSourceType.API,
@@ -126,39 +49,14 @@ CRIME_DATA_SOURCES = {
 
 # API endpoint configurations
 API_ENDPOINTS = {
-    "crimeometer": {
-        "incidents": "/v1/incidents/raw-data",
-        "statistics": "/v1/incidents/stats",
-        "safety_score": "/v1/safety-score"
-    },
-    "berkeley_pd": {
-        "calls_for_service": "/api/views/k2nh-s5h5/rows.json",
-        "arrests": "/api/views/arrests/rows.json"
-    },
-    "fbi_ucr": {
-        "offenses": "/offenses",
-        "agencies": "/agencies",
-        "counts": "/counts"
-    },
     "sf_police": {
         "incidents": "/api/v3/views/wg3w-h783/query.json"
     }
 }
 
-# Crime category mappings for standardization
+# Crime category mappings for San Francisco Police data
 CRIME_CATEGORY_MAPPING = {
-    "crimeometer": {
-        "ROBBERY": "ROBBERY",
-        "ASSAULT": "ASSAULT", 
-        "BURGLARY": "BURGLARY",
-        "THEFT": "THEFT",
-        "AUTO_THEFT": "AUTO_THEFT",
-        "SEXUAL_ASSAULT": "SEXUAL_ASSAULT",
-        "WEAPON_OFFENSE": "WEAPON_OFFENSE",
-        "DRUG_OFFENSE": "DRUG_OFFENSE",
-        "VANDALISM": "VANDALISM"
-    },
-    "berkeley_pd": {
+    "sf_police": {
         "ROBBERY": "ROBBERY",
         "ASSAULT": "ASSAULT",
         "BURGLARY": "BURGLARY", 
@@ -167,30 +65,31 @@ CRIME_CATEGORY_MAPPING = {
         "SEXUAL_ASSAULT": "SEXUAL_ASSAULT",
         "WEAPON_OFFENSE": "WEAPON_OFFENSE",
         "DRUG_OFFENSE": "DRUG_OFFENSE",
-        "VANDALISM": "VANDALISM"
+        "VANDALISM": "VANDALISM",
+        "FRAUD": "FRAUD",
+        "EMBEZZLEMENT": "EMBEZZLEMENT",
+        "FORGERY": "FORGERY",
+        "ARSON": "ARSON",
+        "HOMICIDE": "HOMICIDE"
     }
 }
 
 # Rate limiting configuration
 RATE_LIMITS = {
-    "crimeometer": {"requests_per_hour": 1000, "burst_limit": 100},
-    "berkeley_pd": {"requests_per_hour": 100, "burst_limit": 10},
-    "fbi_ucr": {"requests_per_hour": 1000, "burst_limit": 50},
-    "community_crime_map": {"requests_per_hour": 10, "burst_limit": 1},
-    "ucpd": {"requests_per_hour": 5, "burst_limit": 1}
+    "sf_police": {"requests_per_hour": 100, "burst_limit": 10}
 }
 
 # Geographic coverage areas
 COVERAGE_AREAS = {
-    "berkeley": {
+    "san_francisco": {
         "bounds": {
-            "north": 37.89,
-            "south": 37.85,
-            "east": -122.25,
-            "west": -122.28
+            "north": 37.8324,
+            "south": 37.7049,
+            "east": -122.3482,
+            "west": -122.5168
         },
-        "center": {"lat": 37.8719, "lng": -122.2585},
-        "radius": 5000  # meters
+        "center": {"lat": 37.7749, "lng": -122.4194},
+        "radius": 10000  # meters
     }
 }
 
