@@ -1,6 +1,6 @@
 import React, { useEffect, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { FaRoute, FaExclamationTriangle } from 'react-icons/fa';
+import { FaRoute, FaExclamationTriangle, FaArrowRight } from 'react-icons/fa';
 import './LandingPage.css';
 
 const LandingPage = () => {
@@ -109,62 +109,94 @@ const LandingPage = () => {
 
   return (
     <div className="landing-page">
-      <canvas ref={canvasRef} className="particle-canvas" />
+      {/* Fixed Hero Section */}
+      <div className="hero-section-fixed">
+        <canvas ref={canvasRef} className="particle-canvas" />
 
-      <div className="landing-content">
-        <div className="landing-hero fade-in">
-          <div className="logo-container">
-            <div className="logo-shield">
-              <FaRoute className="logo-icon" />
+        <div className="landing-content">
+          <div className="landing-hero fade-in">
+            <div className="logo-container">
+              <div className="logo-shield">
+                <FaRoute className="logo-icon" />
+              </div>
             </div>
-          </div>
 
-          <h1 className="landing-title">
-            Safer Routes<br />Anywhere, Anytime
-          </h1>
+            <h1 className="landing-title">
+              Safer Routes<br />Anywhere, Anytime
+            </h1>
 
-          <p className="landing-subtitle">
-            Navigate with confidence using real-time safety data and community reports
-          </p>
+            <p className="landing-subtitle">
+              Navigate with confidence using real-time safety data and community reports
+            </p>
 
-          <div className="cta-buttons">
-            <button
-              className="btn btn-primary btn-lg cta-button"
-              onClick={() => navigate('/route-planning')}
-            >
-              <FaRoute className="btn-icon" />
-              Plan Your Route
-            </button>
+            <div className="cta-buttons">
+              <button
+                className="btn btn-primary btn-lg cta-button"
+                onClick={() => navigate('/route-planning')}
+              >
+                <FaRoute className="btn-icon" />
+                Plan Your Route
+              </button>
 
-            <button
-              className="btn btn-outline btn-lg cta-button"
-              onClick={() => navigate('/report-incident')}
-            >
-              <FaExclamationTriangle className="btn-icon" />
-              Report an Incident
-            </button>
-          </div>
-
-          <div className="features-grid">
-            <div></div>
-            <div className="feature-item">
-              <div className="feature-icon">🛡️</div>
-              <h3>Safety First</h3>
-              <p>Routes prioritized by safety scores</p>
+              <button
+                className="btn btn-outline btn-lg cta-button"
+                onClick={() => navigate('/report-incident')}
+              >
+                <FaExclamationTriangle className="btn-icon" />
+                Report an Incident
+              </button>
             </div>
-            <div className="feature-item">
-              <div className="feature-icon">🗺️</div>
-              <h3>Smart Navigation</h3>
-              <p>Turn-by-turn directions optimized for you</p>
-            </div>
-            <div className="feature-item">
-              <div className="feature-icon">👥</div>
-              <h3>Community Powered</h3>
-              <p>Real-time incident reports from users</p>
-            </div>
-            <div></div>
           </div>
         </div>
+      </div>
+
+      {/* Spacer to push content down */}
+      <div className="hero-spacer"></div>
+
+      {/* Glowing Separator */}
+      <div className="section-separator">
+        <div className="separator-glow"></div>
+      </div>
+
+      {/* Below-Fold Content */}
+      <div className="below-fold-container">
+        {/* Features Section */}
+        <section className="features-section">
+          <h2 className="section-heading">⠀</h2>
+
+          <div className="features-grid-enhanced">
+            <div className="feature-item-enhanced" data-node-id="feature-1">
+              <div className="feature-icon-enhanced">🛡️</div>
+              <h3>Safety First</h3>
+              <p>Routes prioritized by safety scores based on comprehensive data analysis</p>
+            </div>
+            <div className="feature-item-enhanced" data-node-id="feature-2">
+              <div className="feature-icon-enhanced">🗺️</div>
+              <h3>Smart Navigation</h3>
+              <p>Turn-by-turn directions optimized for your safety and convenience</p>
+            </div>
+            <div className="feature-item-enhanced" data-node-id="feature-3">
+              <div className="feature-icon-enhanced">👥</div>
+              <h3>Community Powered</h3>
+              <p>Real-time incident reports from users keeping everyone safer</p>
+            </div>
+          </div>
+        </section>
+
+        {/* Final CTA Section */}
+        <section className="final-cta-section">
+          <div className="final-cta-content">
+            <h2 className="final-cta-heading">Your Safety, Our Priority</h2>
+            <p className="final-cta-subtext">Start planning safer routes today</p>
+            <button
+              className="btn-final-cta"
+              onClick={() => navigate('/route-planning')}
+            >
+              Start Route Planning
+              <FaArrowRight className="cta-arrow" />
+            </button>
+          </div>
+        </section>
       </div>
     </div>
   );
