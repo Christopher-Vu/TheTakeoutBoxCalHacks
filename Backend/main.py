@@ -13,8 +13,11 @@ import logging
 # Import modules that may not exist yet - handle gracefully
 try:
     from database_sqlite import db_manager, CrimeReport
-    from data_manager import data_manager
-    from incremental_sync import incremental_sync
+    from data_manager import DataManager
+    from incremental_sync import IncrementalSync
+    # Instantiate the classes
+    data_manager = DataManager()
+    incremental_sync = IncrementalSync()
 except ImportError:
     print("Warning: database module not found. Some features will be disabled.")
     db_manager = None
