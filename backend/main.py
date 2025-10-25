@@ -12,7 +12,7 @@ import logging
 
 # Import modules that may not exist yet - handle gracefully
 try:
-    from database import db_manager, CrimeReport
+    from database_sqlite import db_manager, CrimeReport
 except ImportError:
     print("Warning: database module not found. Some features will be disabled.")
     db_manager = None

@@ -1,20 +1,11 @@
 """
-PostgreSQL models + connections for SAFEPATH crime data aggregation
-Supports multiple data sources with deduplication and standardization
+SQLite-compatible database models for SAFEPATH
+Simplified version without PostGIS dependencies
 """
 
-from sqlalchemy import create_engine, Column, String, Integer, Float, DateTime, Text, Boolean, Index
+from sqlalchemy import create_engine, Column, String, Integer, Float, DateTime, Text, Boolean, Index, JSON
 from sqlalchemy.ext.declarative import declarative_base
 from sqlalchemy.orm import sessionmaker
-from sqlalchemy.dialects.postgresql import JSONB
-from sqlalchemy import JSON
-try:
-    from geoalchemy2 import Geometry
-    HAS_POSTGIS = True
-except ImportError:
-    HAS_POSTGIS = False
-    # Fallback for SQLite
-    from sqlalchemy import Column as GeoColumn
 from datetime import datetime
 import os
 from typing import List, Dict, Optional
@@ -37,12 +28,8 @@ class CrimeReport(Base):
     
     # Location data
     address = Column(String)  # Human-readable address
-    if HAS_POSTGIS:
-        point = Column(Geometry('POINT', srid=4326))  # PostGIS geometry
-    else:
-        point = Column(Text)  # SQLite fallback - store as text
-    lat = Column(Float)
-    lng = Column(Float)
+    lat = Column(Float)  # Latitude
+    lng = Column(Float)  # Longitude
     block_address = Column(String)  # Generalized address for privacy
     
     # Temporal data
@@ -62,29 +49,18 @@ class CrimeReport(Base):
     confidence_score = Column(Float)  # 0-1, how confident we are in this data
     
     # Additional data (flexible JSON storage)
-    raw_data = Column(JSON)  # Original data from source (JSONB for PostgreSQL, JSON for SQLite)
+    raw_data = Column(JSON)  # Original data from source
     tags = Column(JSON)  # Additional categorization
     
     # Indexes for performance
-    if HAS_POSTGIS:
-        __table_args__ = (
-            Index('idx_crimes_point', 'point', postgresql_using='gist'),
-            Index('idx_crimes_occurred_at', 'occurred_at'),
-            Index('idx_crimes_source', 'source'),
-            Index('idx_crimes_type', 'crime_type'),
-            Index('idx_crimes_severity', 'severity'),
-            Index('idx_crimes_duplicate', 'is_duplicate'),
-        )
-    else:
-        # SQLite indexes (no spatial index)
-        __table_args__ = (
-            Index('idx_crimes_lat_lng', 'lat', 'lng'),
-            Index('idx_crimes_occurred_at', 'occurred_at'),
-            Index('idx_crimes_source', 'source'),
-            Index('idx_crimes_type', 'crime_type'),
-            Index('idx_crimes_severity', 'severity'),
-            Index('idx_crimes_duplicate', 'is_duplicate'),
-        )
+    __table_args__ = (
+        Index('idx_crimes_lat_lng', 'lat', 'lng'),
+        Index('idx_crimes_occurred_at', 'occurred_at'),
+        Index('idx_crimes_source', 'source'),
+        Index('idx_crimes_type', 'crime_type'),
+        Index('idx_crimes_severity', 'severity'),
+        Index('idx_crimes_duplicate', 'is_duplicate'),
+    )
 
 class DataSource(Base):
     """Track data sources and their metadata"""
@@ -121,7 +97,7 @@ class DatabaseManager:
     
     def __init__(self, database_url: str = None):
         if database_url is None:
-            # Use SQLite for development, PostgreSQL for production
+            # Use SQLite for development
             database_url = os.getenv('DATABASE_URL', 'sqlite:///./safepath.db')
         
         self.engine = create_engine(database_url)
@@ -147,7 +123,6 @@ class DatabaseManager:
                            min_lng: float, max_lng: float) -> List[Dict]:
         """Get crimes within geographic bounds"""
         with self.get_session() as session:
-            # Use PostGIS spatial query for efficient geographic filtering
             query = session.query(CrimeReport).filter(
                 CrimeReport.lat.between(min_lat, max_lat),
                 CrimeReport.lng.between(min_lng, max_lng),
@@ -158,24 +133,15 @@ class DatabaseManager:
     def get_crimes_near_point(self, lat: float, lng: float, radius_meters: float = 100) -> List[Dict]:
         """Get crimes within radius of a point"""
         with self.get_session() as session:
-            if HAS_POSTGIS:
-                # PostGIS ST_DWithin for efficient radius queries
-                from sqlalchemy import text
-                query = session.query(CrimeReport).filter(
-                    text("ST_DWithin(point, ST_SetSRID(ST_MakePoint(:lng, :lat), 4326), :radius)"),
-                    CrimeReport.is_duplicate == False
-                ).params(lat=lat, lng=lng, radius=radius_meters)
-            else:
-                # SQLite fallback - simple lat/lng distance calculation
-                # Convert radius from meters to approximate degrees (rough approximation)
-                lat_radius = radius_meters / 111000  # 1 degree ≈ 111km
-                lng_radius = radius_meters / (111000 * abs(lat))  # Adjust for latitude
-                
-                query = session.query(CrimeReport).filter(
-                    CrimeReport.lat.between(lat - lat_radius, lat + lat_radius),
-                    CrimeReport.lng.between(lng - lng_radius, lng + lng_radius),
-                    CrimeReport.is_duplicate == False
-                )
+            # Convert radius from meters to approximate degrees (rough approximation)
+            lat_radius = radius_meters / 111000  # 1 degree ≈ 111km
+            lng_radius = radius_meters / (111000 * abs(lat))  # Adjust for latitude
+            
+            query = session.query(CrimeReport).filter(
+                CrimeReport.lat.between(lat - lat_radius, lat + lat_radius),
+                CrimeReport.lng.between(lng - lng_radius, lng + lng_radius),
+                CrimeReport.is_duplicate == False
+            )
             
             return [self._crime_to_dict(crime) for crime in query.all()]
     
@@ -183,17 +149,23 @@ class DatabaseManager:
         """Find potential duplicate crimes based on location and time"""
         with self.get_session() as session:
             # Look for crimes within 50 meters and 1 hour time window
-            from sqlalchemy import text
+            lat_radius = 50 / 111000  # 50 meters in degrees
+            lng_radius = 50 / (111000 * abs(crime_data['lat']))  # Adjust for latitude
+            
             query = session.query(CrimeReport).filter(
-                text("ST_DWithin(point, ST_SetSRID(ST_MakePoint(:lng, :lat), 4326), 50)"),
+                CrimeReport.lat.between(
+                    crime_data['lat'] - lat_radius, 
+                    crime_data['lat'] + lat_radius
+                ),
+                CrimeReport.lng.between(
+                    crime_data['lng'] - lng_radius, 
+                    crime_data['lng'] + lng_radius
+                ),
                 CrimeReport.occurred_at.between(
                     crime_data['occurred_at'] - timedelta(hours=1),
                     crime_data['occurred_at'] + timedelta(hours=1)
                 ),
                 CrimeReport.crime_type == crime_data['crime_type']
-            ).params(
-                lat=crime_data['lat'], 
-                lng=crime_data['lng']
             )
             return query.all()
     
