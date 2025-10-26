@@ -15,3 +15,4 @@ selenium==4.15.2
 # PostgreSQL + PostGIS dependencies
 psycopg2-binary==2.9.11
 geoalchemy2==0.14.2
+asyncpg==0.29.0

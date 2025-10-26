@@ -28,6 +28,7 @@ except ImportError:
 try:
     from safety_analyzer import SafetyAnalyzerAPI
     from safe_router import SafeRouterAPI
+    from crime_aware_router import CrimeAwareRouter
     from real_time_alerts import RealTimeAlertsAPI
 except ImportError:
     print("Warning: Safety analysis modules not found. Some features will be disabled.")
@@ -84,6 +85,17 @@ if db_manager:
         print(f"Warning: Could not create database tables: {e}")
 else:
     print("Warning: Database not available. Some features will be disabled.")
+
+# Initialize crime-aware router
+crime_router = None
+if CrimeAwareRouter:
+    try:
+        database_url = "postgresql://postgres:password@postgres:5432/safepath_spatial"
+        crime_router = CrimeAwareRouter(database_url)
+        print("Crime-aware router initialized successfully")
+    except Exception as e:
+        print(f"Warning: Could not initialize crime-aware router: {e}")
+        crime_router = None
 
 @app.get("/")
 async def health_check():
@@ -616,6 +628,99 @@ async def compare_routes(
         return result
     except Exception as e:
         logger.error(f"Error comparing routes: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+# Crime-Aware Routing Endpoints
+@app.post("/route/crime-aware")
+async def get_crime_aware_route(
+    start_lat: float = Query(..., description="Start latitude"),
+    start_lng: float = Query(..., description="Start longitude"),
+    end_lat: float = Query(..., description="End latitude"),
+    end_lng: float = Query(..., description="End longitude"),
+    route_type: str = Query("balanced", description="Route type: safest, fastest, or balanced")
+):
+    """Get crime-aware route using Dijkstra algorithm with crime data"""
+    if not crime_router:
+        raise HTTPException(status_code=503, detail="Crime-aware router not available")
+    
+    try:
+        route = await crime_router.find_optimal_route(
+            start_lat, start_lng, end_lat, end_lng, route_type
+        )
+        
+        # Get additional crime density data
+        crime_density_data = await crime_router.get_crime_density_heatmap(
+            start_lat, start_lng, end_lat, end_lng
+        )
+        
+        # Get blocked areas (24-hour crimes)
+        blocked_areas = await crime_router.get_blocked_areas(
+            start_lat, start_lng, end_lat, end_lng
+        )
+        
+        # Get route safety breakdown
+        safety_breakdown = crime_router.get_route_safety_breakdown(route)
+        
+        # Convert to API response format
+        return {
+            "route_type": route.route_type,
+            "total_distance": route.total_distance,
+            "total_safety_score": route.total_safety_score,
+            "total_crime_penalty": route.total_crime_penalty,
+            "path_coordinates": route.path_coordinates,
+            "crime_density_map": crime_density_data,
+            "critical_crime_zones": blocked_areas,
+            "route_safety_breakdown": safety_breakdown,
+            "segments": [
+                {
+                    "start_lat": seg.start_lat,
+                    "start_lng": seg.start_lng,
+                    "end_lat": seg.end_lat,
+                    "end_lng": seg.end_lng,
+                    "distance": seg.distance,
+                    "safety_score": seg.safety_score,
+                    "crime_density": seg.crime_density,
+                    "high_severity_crimes": seg.high_severity_crimes,
+                    "recent_crimes": seg.recent_crimes,
+                    "critical_crimes_24h": seg.critical_crimes_24h,
+                    "hours_to_nearest_crime": seg.hours_to_nearest_crime,
+                    "crime_density_score": seg.crime_density_score
+                }
+                for seg in route.segments
+            ]
+        }
+    except Exception as e:
+        logger.error(f"Error finding crime-aware route: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.post("/route/crime-aware/compare")
+async def compare_crime_aware_routes(
+    start_lat: float = Query(..., description="Start latitude"),
+    start_lng: float = Query(..., description="Start longitude"),
+    end_lat: float = Query(..., description="End latitude"),
+    end_lng: float = Query(..., description="End longitude")
+):
+    """Compare all crime-aware route types"""
+    if not crime_router:
+        raise HTTPException(status_code=503, detail="Crime-aware router not available")
+    
+    try:
+        routes = {}
+        for route_type in ['safest', 'fastest', 'balanced']:
+            route = await crime_router.find_optimal_route(
+                start_lat, start_lng, end_lat, end_lng, route_type
+            )
+            routes[f"{route_type}_route"] = {
+                "route_type": route.route_type,
+                "total_distance": route.total_distance,
+                "total_safety_score": route.total_safety_score,
+                "total_crime_penalty": route.total_crime_penalty,
+                "path_coordinates": route.path_coordinates
+            }
+        
+        return routes
+    except Exception as e:
+        logger.error(f"Error comparing crime-aware routes: {e}")
         raise HTTPException(status_code=500, detail=str(e))
 
 # Real-time Alerts Endpoints
