@@ -34,6 +34,7 @@ except ImportError:
     print("Warning: Safety analysis modules not found. Some features will be disabled.")
     SafetyAnalyzerAPI = None
     SafeRouterAPI = None
+    CrimeAwareRouter = None
     RealTimeAlertsAPI = None
 
 try:

@@ -55,6 +55,14 @@ const Map = ({ origin, destination, routes }) => {
     if (!map.current || !routes) return;
 
     // Remove existing route sources
+    if (map.current.getSource('route')) {
+      map.current.removeLayer('route');
+      map.current.removeSource('route');
+    }
+    if (map.current.getSource('route-trail')) {
+      map.current.removeLayer('route-trail');
+      map.current.removeSource('route-trail');
+    }
     if (map.current.getSource('fastest-route')) {
       map.current.removeLayer('fastest-route');
       map.current.removeSource('fastest-route');
@@ -83,33 +91,73 @@ const Map = ({ origin, destination, routes }) => {
       }
     }
 
-    // Add fastest route
-    if (routes.fastest_route && routes.fastest_route.path) {
-      map.current.addSource('fastest-route', {
+    // Add animated route from backend data
+    if (routes && routes.pathCoordinates && routes.pathCoordinates.length > 0) {
+      const coordinates = routes.pathCoordinates.map(coord => [coord[1], coord[0]]); // Convert [lat, lng] to [lng, lat]
+      
+      // Add the route source (starts empty)
+      map.current.addSource('route', {
+        type: 'geojson',
+        data: {
+          type: 'Feature',
+          properties: {
+            safetyScore: routes.safetyScore || 0,
+            distance: routes.distance || '',
+            duration: routes.duration || ''
+          },
+          geometry: {
+            type: 'LineString',
+            coordinates: []
+          }
+        }
+      });
+
+      // Add the animated route layer
+      map.current.addLayer({
+        id: 'route',
+        type: 'line',
+        source: 'route',
+        layout: {
+          'line-join': 'round',
+          'line-cap': 'round'
+        },
+        paint: {
+          'line-color': '#4ECDC4', // Teal color for crime-aware route
+          'line-width': 6,
+          'line-opacity': 0.8
+        }
+      });
+
+      // Add animated route trail layer
+      map.current.addSource('route-trail', {
         type: 'geojson',
         data: {
           type: 'Feature',
           properties: {},
           geometry: {
             type: 'LineString',
-            coordinates: routes.fastest_route.path.map(coord => [coord[1], coord[0]])
+            coordinates: []
           }
         }
       });
 
       map.current.addLayer({
-        id: 'fastest-route',
+        id: 'route-trail',
         type: 'line',
-        source: 'fastest-route',
+        source: 'route-trail',
         layout: {
           'line-join': 'round',
           'line-cap': 'round'
         },
         paint: {
-          'line-color': '#FF6B6B',
-          'line-width': 4
+          'line-color': '#4ECDC4',
+          'line-width': 8,
+          'line-opacity': 0.8
         }
       });
+
+      // Animate the route drawing
+      animateRouteDrawing(coordinates, routes);
     }
 
     // Add safest route
@@ -141,95 +189,25 @@ const Map = ({ origin, destination, routes }) => {
       });
     }
 
-    // Add crime points
-    if (routes.crime_points && routes.crime_points.length > 0) {
-      const crimeFeatures = routes.crime_points.map(crime => ({
+    // Add crime density heatmap from backend data
+    if (routes && routes.crimeData && routes.crimeData.heatmap_data && routes.crimeData.heatmap_data.length > 0) {
+      const crimeFeatures = routes.crimeData.heatmap_data.map(point => ({
         type: 'Feature',
         properties: {
-          id: crime.id,
-          type: crime.type,
-          severity: crime.severity,
-          description: crime.description,
-          time_ago: crime.time_ago
+          density: point.density,
+          intensity: point.intensity
         },
         geometry: {
           type: 'Point',
-          coordinates: [crime.lng, crime.lat]
+          coordinates: [point.lng, point.lat]
         }
       }));
 
-      map.current.addSource('crime-points', {
-        type: 'geojson',
-        data: {
-          type: 'FeatureCollection',
-          features: crimeFeatures
-        }
-      });
-
-      map.current.addLayer({
-        id: 'crime-points',
-        type: 'circle',
-        source: 'crime-points',
-        paint: {
-          'circle-color': [
-            'case',
-            ['>=', ['get', 'severity'], 8], '#FF0000',
-            ['>=', ['get', 'severity'], 6], '#FF8C00',
-            ['>=', ['get', 'severity'], 4], '#FFD700',
-            '#90EE90'
-          ],
-          'circle-radius': [
-            'case',
-            ['>=', ['get', 'severity'], 8], 8,
-            ['>=', ['get', 'severity'], 6], 6,
-            ['>=', ['get', 'severity'], 4], 4,
-            3
-          ]
-        }
-      });
-
-      // Add click handler for crime points
-      map.current.on('click', 'crime-points', (e) => {
-        const feature = e.features[0];
-        new mapboxgl.Popup()
-          .setLngLat(e.lngLat)
-          .setHTML(`
-            <div>
-              <strong>${feature.properties.type}</strong><br/>
-              Severity: ${feature.properties.severity}/10<br/>
-              ${feature.properties.description}<br/>
-              <small>${feature.properties.time_ago}</small>
-            </div>
-          `)
-          .addTo(map.current);
-      });
-
-      map.current.on('mouseenter', 'crime-points', () => {
-        map.current.getCanvas().style.cursor = 'pointer';
-      });
-
-      map.current.on('mouseleave', 'crime-points', () => {
-        map.current.getCanvas().style.cursor = '';
-      });
-    }
-
-    // Add crime density heatmap
-    if (routes.crime_density_map && routes.crime_density_map.heatmap_data) {
       map.current.addSource('crime-heatmap', {
         type: 'geojson',
         data: {
           type: 'FeatureCollection',
-          features: routes.crime_density_map.heatmap_data.map(point => ({
-            type: 'Feature',
-            properties: {
-              intensity: point.intensity,
-              density: point.density
-            },
-            geometry: {
-              type: 'Point',
-              coordinates: [point.lng, point.lat]
-            }
-          }))
+          features: crimeFeatures
         }
       });
 
@@ -257,9 +235,10 @@ const Map = ({ origin, destination, routes }) => {
       });
     }
 
-    // Add 24-hour crime zone markers
-    if (routes.critical_crime_zones) {
-      routes.critical_crime_zones.forEach(crime => {
+
+    // Add critical crime zone markers from backend data
+    if (routes && routes.crimeZones && routes.crimeZones.length > 0) {
+      routes.crimeZones.forEach(crime => {
         const el = document.createElement('div');
         el.className = 'critical-crime-marker';
         el.style.width = '30px';
@@ -277,9 +256,8 @@ const Map = ({ origin, destination, routes }) => {
               .setHTML(`
                 <div style="padding: 8px;">
                   <strong style="color: #DC3545;">⚠️ CRITICAL ALERT</strong>
-                  <p><strong>Crime:</strong> ${crime.crime_type}</p>
-                  <p><strong>Severity:</strong> ${crime.severity}/10</p>
-                  <p><strong>Time:</strong> ${crime.hours_ago.toFixed(1)} hours ago</p>
+                  <p><strong>Crime:</strong> ${crime.crime_type || 'High Risk Area'}</p>
+                  <p><strong>Severity:</strong> ${crime.severity || 'High'}</p>
                   <p style="color: #DC3545;"><strong>AVOID THIS AREA</strong></p>
                 </div>
               `)
@@ -288,9 +266,23 @@ const Map = ({ origin, destination, routes }) => {
       });
     }
 
-    // Add safety-based route visualization
-    if (routes.segments) {
-      routes.segments.forEach((segment, index) => {
+    // Safety segments will be added after animation completes
+  }, [routes]);
+
+  // Helper function for safety-based colors
+  const getSafetyColor = (safetyScore) => {
+    if (safetyScore >= 80) return '#28A745';  // Green - Very Safe
+    if (safetyScore >= 60) return '#FFC107';  // Yellow - Moderate
+    if (safetyScore >= 40) return '#FF9800';  // Orange - Caution
+    if (safetyScore >= 20) return '#FF5722';  // Red-Orange - High Risk
+    return '#DC3545';  // Red - Very High Risk
+  };
+
+  // Add safety-colored segments to the map
+  const addSafetySegments = (routesData) => {
+    if (!map.current || !routesData || !routesData.segments || routesData.segments.length === 0) return;
+
+    routesData.segments.forEach((segment, index) => {
         const sourceId = `segment-${index}`;
         const layerId = `segment-layer-${index}`;
         
@@ -301,6 +293,11 @@ const Map = ({ origin, destination, routes }) => {
           type: 'geojson',
           data: {
             type: 'Feature',
+          properties: {
+            safety_score: segment.safety_score,
+            crime_density: segment.crime_density,
+            distance: segment.distance
+          },
             geometry: {
               type: 'LineString',
               coordinates: [
@@ -317,21 +314,108 @@ const Map = ({ origin, destination, routes }) => {
           source: sourceId,
           paint: {
             'line-color': color,
-            'line-width': 6,
-            'line-opacity': 0.8
+          'line-width': 4,
+          'line-opacity': 0.7
+        }
+      });
+    });
+  };
+
+  // Animate route drawing from start to finish
+  const animateRouteDrawing = (coordinates, routesData) => {
+    if (!map.current || !coordinates || coordinates.length < 2) return;
+
+    let currentIndex = 0;
+    const animationSpeed = 100; // milliseconds between points
+    const totalDuration = coordinates.length * animationSpeed;
+
+    const animate = () => {
+      if (currentIndex < coordinates.length) {
+        // Update both the main route and trail with current coordinates
+        const currentCoordinates = coordinates.slice(0, currentIndex + 1);
+        
+        // Update the main route
+        map.current.getSource('route').setData({
+          type: 'Feature',
+          properties: {
+            safetyScore: routes.safetyScore || 0,
+            distance: routes.distance || '',
+            duration: routes.duration || ''
+          },
+          geometry: {
+            type: 'LineString',
+            coordinates: currentCoordinates
           }
         });
-      });
-    }
-  }, [routes]);
+        
+        // Update the trail (slightly thicker for highlight effect)
+        map.current.getSource('route-trail').setData({
+          type: 'Feature',
+          properties: {},
+          geometry: {
+            type: 'LineString',
+            coordinates: currentCoordinates
+          }
+        });
 
-  // Helper function for safety-based colors
-  const getSafetyColor = (safetyScore) => {
-    if (safetyScore >= 80) return '#28A745';  // Green - Very Safe
-    if (safetyScore >= 60) return '#FFC107';  // Yellow - Moderate
-    if (safetyScore >= 40) return '#FF9800';  // Orange - Caution
-    if (safetyScore >= 20) return '#FF5722';  // Red-Orange - High Risk
-    return '#DC3545';  // Red - Very High Risk
+        // Add a pulsing effect to the current point
+        if (currentIndex < coordinates.length - 1) {
+          const currentPoint = coordinates[currentIndex];
+          const nextPoint = coordinates[currentIndex + 1];
+          
+          // Create a temporary pulsing marker
+          const el = document.createElement('div');
+          el.className = 'route-animation-marker';
+          el.style.width = '12px';
+          el.style.height = '12px';
+          el.style.borderRadius = '50%';
+          el.style.backgroundColor = '#4ECDC4';
+          el.style.border = '2px solid #fff';
+          el.style.boxShadow = '0 0 15px rgba(78, 205, 196, 0.8)';
+          el.style.animation = 'routePulse 0.5s infinite';
+
+          // Remove previous marker
+          const existingMarker = document.querySelector('.route-animation-marker');
+          if (existingMarker) {
+            existingMarker.remove();
+          }
+
+          // Add new marker
+          new mapboxgl.Marker(el)
+            .setLngLat(currentPoint)
+            .addTo(map.current);
+        }
+
+        currentIndex++;
+        setTimeout(animate, animationSpeed);
+      } else {
+        // Animation complete - remove the pulsing marker
+        const marker = document.querySelector('.route-animation-marker');
+        if (marker) {
+          marker.remove();
+        }
+        
+        // Add safety-colored segments now
+        addSafetySegments(routesData);
+        
+        // Remove the trail after showing segments
+        setTimeout(() => {
+          if (map.current.getSource('route-trail')) {
+            map.current.getSource('route-trail').setData({
+              type: 'Feature',
+              properties: {},
+              geometry: {
+                type: 'LineString',
+                coordinates: []
+              }
+            });
+          }
+        }, 1000);
+      }
+    };
+
+    // Start the animation
+    animate();
   };
 
   return (
