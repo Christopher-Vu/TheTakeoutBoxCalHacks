@@ -188,6 +188,43 @@ export const routingAPI = {
       console.error('Error comparing routes:', error);
       throw error;
     }
+  },
+
+  // NEW: Crime-aware routing with full crime density data
+  getCrimeAwareRoute: async (startLat, startLng, endLat, endLng, routeType = 'balanced') => {
+    try {
+      const response = await api.post('/route/crime-aware', null, {
+        params: {
+          start_lat: startLat,
+          start_lng: startLng,
+          end_lat: endLat,
+          end_lng: endLng,
+          route_type: routeType
+        }
+      });
+      return response.data;
+    } catch (error) {
+      console.error('Error getting crime-aware route:', error);
+      throw error;
+    }
+  },
+  
+  // NEW: Compare all crime-aware route types
+  compareCrimeAwareRoutes: async (startLat, startLng, endLat, endLng) => {
+    try {
+      const response = await api.post('/route/crime-aware/compare', null, {
+        params: {
+          start_lat: startLat,
+          start_lng: startLng,
+          end_lat: endLat,
+          end_lng: endLng
+        }
+      });
+      return response.data;
+    } catch (error) {
+      console.error('Error comparing crime-aware routes:', error);
+      throw error;
+    }
   }
 };
 

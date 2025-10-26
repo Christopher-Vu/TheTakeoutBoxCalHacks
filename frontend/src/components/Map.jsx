@@ -1,6 +1,7 @@
 import React, { useEffect, useRef } from 'react';
 import mapboxgl from 'mapbox-gl';
 import 'mapbox-gl/dist/mapbox-gl.css';
+import './Map.css';
 
 const Map = ({ origin, destination, routes }) => {
   const mapContainer = useRef(null);
@@ -65,6 +66,21 @@ const Map = ({ origin, destination, routes }) => {
     if (map.current.getSource('crime-points')) {
       map.current.removeLayer('crime-points');
       map.current.removeSource('crime-points');
+    }
+    if (map.current.getLayer('crime-heatmap')) {
+      map.current.removeLayer('crime-heatmap');
+      map.current.removeSource('crime-heatmap');
+    }
+    if (map.current.getLayer('critical-crime-zones')) {
+      map.current.removeLayer('critical-crime-zones');
+      map.current.removeSource('critical-crime-zones');
+    }
+    // Remove existing segment layers
+    for (let i = 0; i < 50; i++) { // Remove up to 50 segment layers
+      if (map.current.getLayer(`segment-layer-${i}`)) {
+        map.current.removeLayer(`segment-layer-${i}`);
+        map.current.removeSource(`segment-${i}`);
+      }
     }
 
     // Add fastest route
@@ -196,28 +212,170 @@ const Map = ({ origin, destination, routes }) => {
         map.current.getCanvas().style.cursor = '';
       });
     }
+
+    // Add crime density heatmap
+    if (routes.crime_density_map && routes.crime_density_map.heatmap_data) {
+      map.current.addSource('crime-heatmap', {
+        type: 'geojson',
+        data: {
+          type: 'FeatureCollection',
+          features: routes.crime_density_map.heatmap_data.map(point => ({
+            type: 'Feature',
+            properties: {
+              intensity: point.intensity,
+              density: point.density
+            },
+            geometry: {
+              type: 'Point',
+              coordinates: [point.lng, point.lat]
+            }
+          }))
+        }
+      });
+
+      map.current.addLayer({
+        id: 'crime-heatmap',
+        type: 'heatmap',
+        source: 'crime-heatmap',
+        paint: {
+          'heatmap-weight': ['get', 'intensity'],
+          'heatmap-intensity': 1,
+          'heatmap-color': [
+            'interpolate',
+            ['linear'],
+            ['heatmap-density'],
+            0, 'rgba(33,102,172,0)',
+            0.2, 'rgb(103,169,207)',
+            0.4, 'rgb(209,229,240)',
+            0.6, 'rgb(253,219,199)',
+            0.8, 'rgb(239,138,98)',
+            1, 'rgb(178,24,43)'
+          ],
+          'heatmap-radius': 20,
+          'heatmap-opacity': 0.6
+        }
+      });
+    }
+
+    // Add 24-hour crime zone markers
+    if (routes.critical_crime_zones) {
+      routes.critical_crime_zones.forEach(crime => {
+        const el = document.createElement('div');
+        el.className = 'critical-crime-marker';
+        el.style.width = '30px';
+        el.style.height = '30px';
+        el.style.borderRadius = '50%';
+        el.style.backgroundColor = '#DC3545';
+        el.style.border = '3px solid #fff';
+        el.style.boxShadow = '0 0 10px rgba(220,53,69,0.5)';
+        el.style.animation = 'pulse 2s infinite';
+
+        new mapboxgl.Marker(el)
+          .setLngLat([crime.lng, crime.lat])
+          .setPopup(
+            new mapboxgl.Popup({ offset: 25 })
+              .setHTML(`
+                <div style="padding: 8px;">
+                  <strong style="color: #DC3545;">⚠️ CRITICAL ALERT</strong>
+                  <p><strong>Crime:</strong> ${crime.crime_type}</p>
+                  <p><strong>Severity:</strong> ${crime.severity}/10</p>
+                  <p><strong>Time:</strong> ${crime.hours_ago.toFixed(1)} hours ago</p>
+                  <p style="color: #DC3545;"><strong>AVOID THIS AREA</strong></p>
+                </div>
+              `)
+          )
+          .addTo(map.current);
+      });
+    }
+
+    // Add safety-based route visualization
+    if (routes.segments) {
+      routes.segments.forEach((segment, index) => {
+        const sourceId = `segment-${index}`;
+        const layerId = `segment-layer-${index}`;
+        
+        // Color based on safety score
+        const color = getSafetyColor(segment.safety_score);
+        
+        map.current.addSource(sourceId, {
+          type: 'geojson',
+          data: {
+            type: 'Feature',
+            geometry: {
+              type: 'LineString',
+              coordinates: [
+                [segment.start_lng, segment.start_lat],
+                [segment.end_lng, segment.end_lat]
+              ]
+            }
+          }
+        });
+
+        map.current.addLayer({
+          id: layerId,
+          type: 'line',
+          source: sourceId,
+          paint: {
+            'line-color': color,
+            'line-width': 6,
+            'line-opacity': 0.8
+          }
+        });
+      });
+    }
   }, [routes]);
+
+  // Helper function for safety-based colors
+  const getSafetyColor = (safetyScore) => {
+    if (safetyScore >= 80) return '#28A745';  // Green - Very Safe
+    if (safetyScore >= 60) return '#FFC107';  // Yellow - Moderate
+    if (safetyScore >= 40) return '#FF9800';  // Orange - Caution
+    if (safetyScore >= 20) return '#FF5722';  // Red-Orange - High Risk
+    return '#DC3545';  // Red - Very High Risk
+  };
 
   return (
     <div className="map-container">
       <div ref={mapContainer} className="map" />
       {routes && (
         <div className="map-legend">
-          <div className="legend-item">
-            <div className="legend-color" style={{backgroundColor: '#FF6B6B'}}></div>
-            <span>Fastest Route</span>
+          <div className="legend-section">
+            <h4>Route Safety</h4>
+            <div className="legend-item">
+              <div className="legend-color" style={{backgroundColor: '#28A745'}}></div>
+              <span>Very Safe (80+)</span>
+            </div>
+            <div className="legend-item">
+              <div className="legend-color" style={{backgroundColor: '#FFC107'}}></div>
+              <span>Moderate (60-79)</span>
+            </div>
+            <div className="legend-item">
+              <div className="legend-color" style={{backgroundColor: '#FF9800'}}></div>
+              <span>Caution (40-59)</span>
+            </div>
+            <div className="legend-item">
+              <div className="legend-color" style={{backgroundColor: '#FF5722'}}></div>
+              <span>High Risk (20-39)</span>
+            </div>
+            <div className="legend-item">
+              <div className="legend-color" style={{backgroundColor: '#DC3545'}}></div>
+              <span>Very High Risk (&lt;20)</span>
+            </div>
           </div>
-          <div className="legend-item">
-            <div className="legend-color" style={{backgroundColor: '#4ECDC4'}}></div>
-            <span>Safest Route</span>
-          </div>
-          <div className="legend-item">
-            <div className="legend-color" style={{backgroundColor: '#FF0000'}}></div>
-            <span>High Risk Crime</span>
-          </div>
-          <div className="legend-item">
-            <div className="legend-color" style={{backgroundColor: '#FFD700'}}></div>
-            <span>Medium Risk Crime</span>
+          <div className="legend-section">
+            <h4>Crime Alerts</h4>
+            <div className="legend-item">
+              <div className="legend-color critical-marker"></div>
+              <span>24h Critical Crime</span>
+            </div>
+            <div className="legend-item">
+              <div className="legend-color" style={{backgroundColor: '#FF0000'}}></div>
+              <span>High Risk Crime</span>
+            </div>
+            <div className="legend-item">
+              <div className="legend-color" style={{backgroundColor: '#FFD700'}}></div>
+              <span>Medium Risk Crime</span>
+            </div>
           </div>
         </div>
       )}

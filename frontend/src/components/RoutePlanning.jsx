@@ -24,7 +24,10 @@ import {
   getSafetyScoreColor,
   getSafetyScoreLabel
 } from '../utils/mockData';
+import { routingAPI } from '../utils/api';
 import AddressAutocomplete from './AddressAutocomplete';
+import Map from './Map';
+import SafetyDashboard from './SafetyDashboard';
 import './RoutePlanning.css';
 
 const RoutePlanning = () => {
@@ -39,24 +42,53 @@ const RoutePlanning = () => {
   const [directions, setDirections] = useState([]);
   const [directionsExpanded, setDirectionsExpanded] = useState(true);
   const [isSearching, setIsSearching] = useState(false);
+  const [routeType, setRouteType] = useState('balanced');
 
   const travelModes = [
     { id: 'walking', icon: FaWalking, label: 'Walking' },
     { id: 'biking', icon: FaBicycle, label: 'Biking' },
   ];
 
-  const handleFindRoutes = () => {
+  const handleFindRoutes = async () => {
     if (!selectedOrigin || !selectedDestination) return;
 
     setIsSearching(true);
-    // Simulate API call
-    setTimeout(() => {
+    
+    try {
+      // Call crime-aware routing API
+      const crimeAwareRoute = await routingAPI.getCrimeAwareRoute(
+        selectedOrigin.lat,
+        selectedOrigin.lng,
+        selectedDestination.lat,
+        selectedDestination.lng,
+        routeType
+      );
+      
+      // Transform API response to match Map component expectations
+      const transformedRoutes = {
+        path_coordinates: crimeAwareRoute.path_coordinates,
+        segments: crimeAwareRoute.segments,
+        crime_density_map: crimeAwareRoute.crime_density_map,
+        critical_crime_zones: crimeAwareRoute.critical_crime_zones,
+        route_safety_breakdown: crimeAwareRoute.route_safety_breakdown,
+        total_distance: crimeAwareRoute.total_distance,
+        total_safety_score: crimeAwareRoute.total_safety_score,
+        route_type: crimeAwareRoute.route_type
+      };
+      
+      setRoutes([transformedRoutes]);
+      setSelectedRoute(transformedRoutes);
+      setDirections([]);
+      
+    } catch (error) {
+      console.error('Error fetching crime-aware route:', error);
+      // Fallback to mock data if API fails
       const mockRoutes = generateMockRoutes(selectedOrigin.name, selectedDestination.name, travelMode);
       setRoutes(mockRoutes);
       setSelectedRoute(null);
-      setDirections([]);
+    } finally {
       setIsSearching(false);
-    }, 1000);
+    }
   };
 
   const handleOriginSelect = (location) => {
@@ -109,6 +141,30 @@ const RoutePlanning = () => {
             onSelect={handleDestinationSelect}
             className="destination-autocomplete"
           />
+        </div>
+
+        <div className="route-type-selector">
+          <label>Route Priority:</label>
+          <div className="route-type-buttons">
+            <button 
+              className={`route-type-btn ${routeType === 'safest' ? 'active' : ''}`}
+              onClick={() => setRouteType('safest')}
+            >
+              🛡️ Safest
+            </button>
+            <button 
+              className={`route-type-btn ${routeType === 'balanced' ? 'active' : ''}`}
+              onClick={() => setRouteType('balanced')}
+            >
+              ⚖️ Balanced
+            </button>
+            <button 
+              className={`route-type-btn ${routeType === 'fastest' ? 'active' : ''}`}
+              onClick={() => setRouteType('fastest')}
+            >
+              ⚡ Fastest
+            </button>
+          </div>
         </div>
 
         <div className="travel-modes">
@@ -254,58 +310,16 @@ const RoutePlanning = () => {
       </aside>
 
       <div className="map-container">
-        <div className="map-placeholder">
-          <div className="map-grid-pattern"></div>
-          <div className="map-overlay-content">
-            <div className="map-badge">
-              <FaLayerGroup /> Map Integration Coming Soon
-            </div>
-            <p className="map-placeholder-text">
-              Interactive map with safety indicators and route visualization will be displayed here
-            </p>
-          </div>
-
-          <div className="map-controls">
-            <button className="map-control-btn" title="Zoom in">
-              <FaPlus />
-            </button>
-            <button className="map-control-btn" title="Zoom out">
-              <FaMinus />
-            </button>
-            <button className="map-control-btn" title="Center location">
-              <FaCrosshairs />
-            </button>
-            <button className="map-control-btn" title="Toggle layers">
-              <FaLayerGroup />
-            </button>
-            <button className="map-control-btn" title="Fullscreen">
-              <FaExpand />
-            </button>
-          </div>
-
-          {selectedRoute && (
-            <div className="selected-route-overlay card">
-              <h4>Selected Route</h4>
-              <div className="overlay-route-info">
-                <div className="overlay-stat">
-                  <div className="stat-value">{selectedRoute.duration}</div>
-                  <div className="stat-label">Duration</div>
-                </div>
-                <div className="overlay-stat">
-                  <div className="stat-value">{selectedRoute.distance}</div>
-                  <div className="stat-label">Distance</div>
-                </div>
-                <div className="overlay-stat">
-                  <div className="stat-value" style={{ color: getSafetyScoreColor(selectedRoute.safetyScore) }}>
-                    {selectedRoute.safetyScore}
-                  </div>
-                  <div className="stat-label">Safety</div>
-                </div>
-              </div>
-            </div>
-          )}
-        </div>
+        <Map 
+          origin={selectedOrigin}
+          destination={selectedDestination}
+          routes={selectedRoute}
+        />
       </div>
+
+      {selectedRoute && selectedRoute.route_safety_breakdown && (
+        <SafetyDashboard safetyBreakdown={selectedRoute.route_safety_breakdown} />
+      )}
     </div>
   );
 };
