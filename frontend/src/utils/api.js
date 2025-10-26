@@ -190,7 +190,7 @@ export const routingAPI = {
     }
   },
 
-  // Get crime-aware route using Dijkstra algorithm
+  // NEW: Crime-aware routing with full crime density data
   getCrimeAwareRoute: async (startLat, startLng, endLat, endLng, routeType = 'balanced') => {
     try {
       const response = await api.post('/route/crime-aware', null, {
