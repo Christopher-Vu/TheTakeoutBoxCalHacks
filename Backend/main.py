@@ -3,12 +3,32 @@ Enhanced API endpoints for SAFEPATH crime data aggregation
 Supports multiple data sources with comprehensive filtering and analytics
 """
 
-from fastapi import FastAPI, HTTPException, Query, Depends
+from fastapi import FastAPI, HTTPException, Query, Depends, Form, File, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 from typing import List, Dict, Optional, Any
 from datetime import datetime, timedelta
 import logging
+import json
+import os
+import sys
+import uuid
+import base64
+from dotenv import load_dotenv
+
+# Load environment variables
+load_dotenv()
+
+# Import Groq at module level to catch import errors early
+try:
+    from groq import Groq
+    GROQ_AVAILABLE = True
+    print("Groq module imported successfully")
+except ImportError as e:
+    print(f"Groq import failed: {e}")
+    print(f"Python path: {sys.path}")
+    print(f"Python executable: {sys.executable}")
+    GROQ_AVAILABLE = False
 
 # Import modules that may not exist yet - handle gracefully
 try:
@@ -89,7 +109,7 @@ else:
 
 # Initialize crime-aware router
 crime_router = None
-if CrimeAwareRouter:
+if CrimeAwareRouter is not None:
     try:
         database_url = "postgresql://postgres:password@postgres:5432/safepath_spatial"
         crime_router = CrimeAwareRouter(database_url)
@@ -758,6 +778,180 @@ def calculate_routes(start: List[float], end: List[float], safety_weight: float)
         },
         "crime_points": []
     }
+
+# Incident submission endpoints
+@app.post("/api/incident/submit")
+async def submit_incident(
+    lat: float = Form(...),
+    lng: float = Form(...),
+    address: str = Form(...),
+    category: str = Form(...),
+    datetime_str: str = Form(...),
+    description: str = Form("")
+):
+    """Submit a user-reported incident"""
+    try:
+        # Generate unique incident ID
+        incident_id = f"user_{uuid.uuid4().hex[:8]}"
+        
+        # Create incident object
+        incident = {
+            "id": incident_id,
+            "crime_type": category.upper(),
+            "lat": lat,
+            "lng": lng,
+            "address": address,
+            "occurred_datetime": datetime_str,
+            "description": description,
+            "source": "user_reported",
+            "confidence": 1.0,  # User-reported incidents have full confidence
+            "created_at": datetime.now().isoformat()
+        }
+        
+        # Save to test_incidents.json
+        data_file = os.path.join(os.path.dirname(os.path.dirname(__file__)), "data", "test_incidents.json")
+        os.makedirs(os.path.dirname(data_file), exist_ok=True)
+        
+        if os.path.exists(data_file):
+            with open(data_file, 'r') as f:
+                data = json.load(f)
+        else:
+            data = {
+                "incidents": [],
+                "last_updated": None,
+                "source": "user_reported",
+                "count": 0
+            }
+        
+        data["incidents"].append(incident)
+        data["last_updated"] = datetime.now().isoformat()
+        data["count"] = len(data["incidents"])
+        
+        with open(data_file, 'w') as f:
+            json.dump(data, f, indent=2)
+        
+        return {
+            "status": "success",
+            "message": "Incident submitted successfully",
+            "incident": incident
+        }
+        
+    except Exception as e:
+        logger.error(f"Error submitting incident: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.post("/api/incident/analyze-image")
+async def analyze_image(image: UploadFile = File(...)):
+    """Analyze uploaded image using Groq AI"""
+    try:
+        # Validate file type
+        if not image.content_type.startswith('image/'):
+            raise HTTPException(status_code=400, detail="File must be an image")
+        
+        # Check file size (max 10MB)
+        image_bytes = await image.read()
+        if len(image_bytes) > 10 * 1024 * 1024:
+            raise HTTPException(status_code=400, detail="File too large (max 10MB)")
+        
+        # Analyze image with Groq API
+        print(f"GROQ_AVAILABLE: {GROQ_AVAILABLE}")
+        if not GROQ_AVAILABLE:
+            return {
+                "suggested_category": "OTHER",
+                "confidence": 0.0,
+                "description": "Groq module not available. Please install groq package.",
+                "keywords": ["groq_unavailable"],
+                "reasoning": "The Groq AI module is not installed or not accessible."
+            }
+        
+        try:
+            # Initialize Groq client
+            groq_api_key = os.getenv("GROQ_API_KEY")
+            if not groq_api_key:
+                raise HTTPException(status_code=500, detail="Groq API key not configured")
+            
+            # Initialize Groq client with minimal parameters to avoid conflicts
+            client = Groq(api_key=groq_api_key)
+            
+            # Convert image to base64 for Groq API
+            image_base64 = base64.b64encode(image_bytes).decode('utf-8')
+            
+            # Create the analysis prompt
+            prompt = """
+            Analyze this image and determine what type of crime or incident it shows. 
+            
+            Look for signs of:
+            - Theft (broken windows, forced entry, stolen items)
+            - Vandalism (graffiti, property damage, destruction)
+            - Assault (injuries, weapons, violent scenes)
+            - Burglary (forced entry, stolen property, damage)
+            - Other criminal activity
+            
+            Respond with a JSON object containing:
+            - suggested_category: One of [THEFT, VANDALISM, ASSAULT, BURGLARY, OTHER]
+            - confidence: A number between 0.0 and 1.0
+            - description: A brief description of what you see in the image
+            - keywords: An array of relevant keywords
+            - reasoning: Your reasoning for the classification
+            
+            Be specific and factual. If the image doesn't clearly show a crime, suggest "OTHER" with low confidence.
+            """
+            
+            # Call Groq API with Llama 4 Scout vision model
+            response = client.chat.completions.create(
+                model="meta-llama/llama-4-scout-17b-16e-instruct",
+                messages=[
+                    {
+                        "role": "user",
+                        "content": [
+                            {"type": "text", "text": prompt},
+                            {
+                                "type": "image_url",
+                                "image_url": {
+                                    "url": f"data:image/jpeg;base64,{image_base64}"
+                                }
+                            }
+                        ]
+                    }
+                ],
+                temperature=0.1,
+                max_tokens=500
+            )
+            
+            # Parse the response
+            analysis_text = response.choices[0].message.content
+            
+            # Try to extract JSON from the response
+            import re
+            json_match = re.search(r'\{.*\}', analysis_text, re.DOTALL)
+            if json_match:
+                analysis_json = json.loads(json_match.group())
+            else:
+                # Fallback if JSON parsing fails
+                analysis_json = {
+                    "suggested_category": "OTHER",
+                    "confidence": 0.5,
+                    "description": analysis_text[:200] + "..." if len(analysis_text) > 200 else analysis_text,
+                    "keywords": ["analysis", "image"],
+                    "reasoning": "Unable to parse structured response from AI"
+                }
+            
+            return analysis_json
+            
+        except Exception as groq_error:
+            logger.error(f"Groq API error: {groq_error}")
+            # Fallback to mock analysis if Groq fails
+            return {
+                "suggested_category": "THEFT",
+                "confidence": 0.5,
+                "description": f"AI analysis failed: {str(groq_error)}. Please manually categorize this incident.",
+                "keywords": ["analysis_failed"],
+                "reasoning": "The AI analysis service encountered an error. Please review the image manually."
+            }
+        
+    except Exception as e:
+        logger.error(f"Image analysis error: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
 
 if __name__ == "__main__":
     import uvicorn

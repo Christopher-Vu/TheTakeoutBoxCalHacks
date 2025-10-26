@@ -6,17 +6,22 @@ import {
   FaMapMarkerAlt,
   FaCalendarAlt,
   FaFilter,
-  FaTimes
+  FaTimes,
+  FaRobot,
+  FaCheck,
+  FaTimes as FaX
 } from 'react-icons/fa';
 import { mockIncidents, getTimeAgo, incidentTypeLabels, incidentTypeColors } from '../utils/mockData';
+import AddressAutocomplete from './AddressAutocomplete';
 import './ReportIncident.css';
 
 const ReportIncident = () => {
   const navigate = useNavigate();
   const [formData, setFormData] = useState({
-    type: 'theft',
+    type: '',
     description: '',
     location: '',
+    locationCoords: null, // { lat, lng, address }
     dateTime: '',
     image: null
   });
@@ -24,6 +29,10 @@ const ReportIncident = () => {
   const [dragActive, setDragActive] = useState(false);
   const [filterType, setFilterType] = useState('all');
   const [showSuccess, setShowSuccess] = useState(false);
+  const [aiAnalysis, setAiAnalysis] = useState(null);
+  const [showAiModal, setShowAiModal] = useState(false);
+  const [isAnalyzing, setIsAnalyzing] = useState(false);
+  const [submissionStatus, setSubmissionStatus] = useState(null);
 
   const handleInputChange = (e) => {
     const { name, value } = e.target;
@@ -67,23 +76,125 @@ const ReportIncident = () => {
     }
   };
 
-  const handleSubmit = (e) => {
-    e.preventDefault();
-    // Mock submission
-    console.log('Submitting incident report:', formData);
-    setShowSuccess(true);
-    setTimeout(() => {
-      setShowSuccess(false);
-      // Reset form
-      setFormData({
-        type: 'theft',
-        description: '',
-        location: '',
-        dateTime: '',
-        image: null
+  const handleLocationSelect = (locationData) => {
+    setFormData(prev => ({
+      ...prev,
+      location: locationData.name,
+      locationCoords: {
+        lat: locationData.lat,
+        lng: locationData.lng,
+        address: locationData.name
+      }
+    }));
+  };
+
+  const analyzeImage = async () => {
+    if (!formData.image) return;
+    
+    setIsAnalyzing(true);
+    try {
+      const formDataToSend = new FormData();
+      formDataToSend.append('image', formData.image);
+      
+      const response = await fetch('http://localhost:8000/api/incident/analyze-image', {
+        method: 'POST',
+        body: formDataToSend
       });
-      setImagePreview(null);
-    }, 2000);
+      
+      if (!response.ok) {
+        throw new Error('Analysis failed');
+      }
+      
+      const analysis = await response.json();
+      setAiAnalysis(analysis);
+      setShowAiModal(true);
+    } catch (error) {
+      console.error('Image analysis error:', error);
+      setSubmissionStatus({ type: 'error', message: 'Failed to analyze image' });
+    } finally {
+      setIsAnalyzing(false);
+    }
+  };
+
+  const acceptAiSuggestion = () => {
+    if (aiAnalysis) {
+      const categoryMapping = {
+        'THEFT': 'theft',
+        'VANDALISM': 'vandalism',
+        'ASSAULT': 'assault',
+        'BURGLARY': 'burglary',
+        'OTHER': 'other'
+      };
+      
+      const frontendCategory = categoryMapping[aiAnalysis.suggested_category] || 'other';
+      
+      setFormData(prev => ({
+        ...prev,
+        type: prev.type || frontendCategory,
+        description: prev.description || aiAnalysis.description
+      }));
+    }
+    setShowAiModal(false);
+  };
+
+  const rejectAiSuggestion = () => {
+    setShowAiModal(false);
+  };
+
+  const handleSubmit = async (e) => {
+    e.preventDefault();
+    
+    if (!formData.locationCoords) {
+      setSubmissionStatus({ type: 'error', message: 'Please select a location from the dropdown' });
+      return;
+    }
+    
+    if (!formData.dateTime) {
+      setSubmissionStatus({ type: 'error', message: 'Please enter the incident date and time' });
+      return;
+    }
+    
+    setSubmissionStatus({ type: 'loading', message: 'Submitting incident...' });
+    
+    try {
+      const submitData = new FormData();
+      submitData.append('lat', formData.locationCoords.lat);
+      submitData.append('lng', formData.locationCoords.lng);
+      submitData.append('address', formData.locationCoords.address);
+      submitData.append('category', formData.type || 'other');
+      submitData.append('datetime_str', formData.dateTime);
+      submitData.append('description', formData.description);
+      
+      const response = await fetch('http://localhost:8000/api/incident/submit', {
+        method: 'POST',
+        body: submitData
+      });
+      
+      if (!response.ok) {
+        const errorData = await response.json();
+        throw new Error(errorData.detail || 'Submission failed');
+      }
+      
+      const result = await response.json();
+      setSubmissionStatus({ type: 'success', message: 'Incident submitted successfully!', data: result.incident });
+      
+      setTimeout(() => {
+        setFormData({
+          type: '',
+          description: '',
+          location: '',
+          locationCoords: null,
+          dateTime: '',
+          image: null
+        });
+        setImagePreview(null);
+        setSubmissionStatus(null);
+      }, 3000);
+      
+    } catch (error) {
+      console.error('Submission error:', error);
+      setSubmissionStatus({ type: 'error', message: error.message });
+    }
   };
 
   const filteredIncidents = filterType === 'all'
@@ -103,18 +214,19 @@ const ReportIncident = () => {
 
         <form className="incident-form card" onSubmit={handleSubmit}>
           <div className="form-section">
-            <label className="label">Incident Type</label>
+            <label className="label">Incident Type (Optional)</label>
             <select
               name="type"
               value={formData.type}
               onChange={handleInputChange}
               className="select"
-              required
             >
+              <option value="">Select incident type...</option>
               <option value="theft">Theft</option>
               <option value="assault">Assault</option>
               <option value="harassment">Harassment</option>
               <option value="vandalism">Vandalism</option>
+              <option value="burglary">Burglary</option>
               <option value="other">Other</option>
             </select>
           </div>
@@ -123,14 +235,11 @@ const ReportIncident = () => {
             <label className="label">
               <FaMapMarkerAlt /> Location
             </label>
-            <input
-              type="text"
-              name="location"
+            <AddressAutocomplete
               value={formData.location}
-              onChange={handleInputChange}
-              className="input"
+              onChange={setFormData}
+              onSelect={handleLocationSelect}
               placeholder="Enter location or address"
-              required
             />
           </div>
 
@@ -149,14 +258,13 @@ const ReportIncident = () => {
           </div>
 
           <div className="form-section">
-            <label className="label">Description</label>
+            <label className="label">Description (Optional)</label>
             <textarea
               name="description"
               value={formData.description}
               onChange={handleInputChange}
               className="textarea"
               placeholder="Describe what happened in detail..."
-              required
             />
           </div>
 
@@ -174,16 +282,27 @@ const ReportIncident = () => {
               {imagePreview ? (
                 <div className="image-preview">
                   <img src={imagePreview} alt="Preview" />
-                  <button
-                    type="button"
-                    className="remove-image-btn"
-                    onClick={() => {
-                      setImagePreview(null);
-                      setFormData(prev => ({ ...prev, image: null }));
-                    }}
-                  >
-                    <FaTimes /> Remove
-                  </button>
+                  <div className="image-actions">
+                    <button
+                      type="button"
+                      className="btn btn-primary analyze-btn"
+                      onClick={analyzeImage}
+                      disabled={isAnalyzing}
+                    >
+                      <FaRobot /> {isAnalyzing ? 'Analyzing...' : 'Analyze Image'}
+                    </button>
+                    <button
+                      type="button"
+                      className="remove-image-btn"
+                      onClick={() => {
+                        setImagePreview(null);
+                        setFormData(prev => ({ ...prev, image: null }));
+                        setAiAnalysis(null);
+                      }}
+                    >
+                      <FaTimes /> Remove
+                    </button>
+                  </div>
                 </div>
               ) : (
                 <>
@@ -208,9 +327,17 @@ const ReportIncident = () => {
             Submit Report
           </button>
 
-          {showSuccess && (
-            <div className="success-message scale-in">
-              ✓ Report submitted successfully! Thank you for helping keep the community safe.
+          {submissionStatus && (
+            <div className={`status-message ${submissionStatus.type}`}>
+              {submissionStatus.type === 'loading' && <div className="spinner"></div>}
+              {submissionStatus.message}
+              {submissionStatus.data && (
+                <div className="incident-details">
+                  <p><strong>Incident ID:</strong> {submissionStatus.data.id}</p>
+                  <p><strong>Type:</strong> {submissionStatus.data.crime_type}</p>
+                  <p><strong>Location:</strong> {submissionStatus.data.address}</p>
+                </div>
+              )}
             </div>
           )}
         </form>
@@ -258,6 +385,61 @@ const ReportIncident = () => {
           ))}
         </div>
       </aside>
+
+      {/* AI Analysis Modal */}
+      {showAiModal && aiAnalysis && (
+        <div className="modal-overlay">
+          <div className="modal-content ai-analysis-modal">
+            <div className="modal-header">
+              <h3><FaRobot /> AI Analysis Results</h3>
+              <button className="close-btn" onClick={rejectAiSuggestion}>
+                <FaX />
+              </button>
+            </div>
+            <div className="modal-body">
+              <div className="analysis-result">
+                <div className="suggestion">
+                  <h4>Suggested Category:</h4>
+                  <span className="suggested-category">
+                    {aiAnalysis.suggested_category}
+                  </span>
+                  <span className={`confidence ${aiAnalysis.confidence > 0.7 ? 'high' : aiAnalysis.confidence > 0.5 ? 'medium' : 'low'}`}>
+                    (Confidence: {Math.round(aiAnalysis.confidence * 100)}%)
+                  </span>
+                </div>
+                <div className="description">
+                  <h4>Description:</h4>
+                  <p>{aiAnalysis.description}</p>
+                </div>
+                {aiAnalysis.keywords && aiAnalysis.keywords.length > 0 && (
+                  <div className="keywords">
+                    <h4>Keywords:</h4>
+                    <div className="keyword-tags">
+                      {aiAnalysis.keywords.map((keyword, index) => (
+                        <span key={index} className="keyword-tag">{keyword}</span>
+                      ))}
+                    </div>
+                  </div>
+                )}
+                {aiAnalysis.reasoning && (
+                  <div className="reasoning">
+                    <h4>Reasoning:</h4>
+                    <p>{aiAnalysis.reasoning}</p>
+                  </div>
+                )}
+              </div>
+            </div>
+            <div className="modal-footer">
+              <button className="btn btn-outline" onClick={rejectAiSuggestion}>
+                <FaX /> Reject
+              </button>
+              <button className="btn btn-primary" onClick={acceptAiSuggestion}>
+                <FaCheck /> Accept Suggestion
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 };
