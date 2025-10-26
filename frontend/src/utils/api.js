@@ -92,6 +92,19 @@ export const crimeAPI = {
       console.error('Error fetching crime heatmap:', error);
       throw error;
     }
+  },
+
+  // Get crimes from last 24 hours
+  getRecent24HourCrimes: async (minLat, maxLat, minLng, maxLng) => {
+    try {
+      const response = await api.get('/crimes/recent-24h', {
+        params: { min_lat: minLat, max_lat: maxLat, min_lng: minLng, max_lng: maxLng }
+      });
+      return response.data;
+    } catch (error) {
+      console.error('Error fetching 24h crimes:', error);
+      throw error;
+    }
   }
 };
 

@@ -229,6 +229,50 @@ async def get_crimes_near(
         logger.error(f"Error getting crimes near point: {e}")
         raise HTTPException(status_code=500, detail=str(e))
 
+@app.get("/crimes/recent-24h")
+async def get_recent_24h_crimes(
+    min_lat: float = Query(..., description="Minimum latitude"),
+    max_lat: float = Query(..., description="Maximum latitude"),
+    min_lng: float = Query(..., description="Minimum longitude"),
+    max_lng: float = Query(..., description="Maximum longitude")
+):
+    """Get all crimes within 24 hours for map display"""
+    try:
+        date_filter = datetime.utcnow() - timedelta(hours=24)
+        
+        if db_manager:
+            crimes = db_manager.get_crimes_in_bounds(min_lat, max_lat, min_lng, max_lng)
+        else:
+            crimes = []
+        
+        # Filter to last 24 hours
+        recent_crimes = []
+        for crime in crimes:
+            if crime.get('occurred_at'):
+                crime_date = datetime.fromisoformat(crime['occurred_at'].replace('Z', '+00:00'))
+                if crime_date >= date_filter:
+                    recent_crimes.append({
+                        'id': crime.get('id'),
+                        'lat': crime.get('lat'),
+                        'lng': crime.get('lng'),
+                        'crime_type': crime.get('crime_type'),
+                        'severity': crime.get('severity'),
+                        'description': crime.get('description', ''),
+                        'occurred_at': crime.get('occurred_at'),
+                        'source': crime.get('source'),
+                        'address': crime.get('address', ''),
+                        'agency': crime.get('agency', '')
+                    })
+        
+        return {
+            "crimes": recent_crimes,
+            "total": len(recent_crimes),
+            "time_window": "24_hours"
+        }
+    except Exception as e:
+        logger.error(f"Error fetching 24h crimes: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
 @app.post("/route")
 async def calculate_route(
     start: List[float] = Query(..., description="Start coordinates [lat, lng]"),
@@ -829,6 +873,29 @@ async def submit_incident(
         
         with open(data_file, 'w') as f:
             json.dump(data, f, indent=2)
+        
+        # Also insert into PostgreSQL database
+        if db_manager:
+            try:
+                db_manager.add_crime_report({
+                    'id': f"user_{uuid.uuid4()}",
+                    'source_id': incident_id,
+                    'source': 'user_reported',
+                    'crime_type': category.upper(),
+                    'severity': 5,  # Default severity for user reports
+                    'description': description,
+                    'address': address,
+                    'lat': lat,
+                    'lng': lng,
+                    'occurred_at': datetime_str,
+                    'reported_at': datetime.now(),
+                    'agency': 'User Report',
+                    'confidence_score': 1.0
+                })
+                logger.info(f"User incident {incident_id} inserted into database")
+            except Exception as db_error:
+                logger.error(f"Failed to insert user incident into database: {db_error}")
+                # Don't fail the request if database insert fails
         
         return {
             "status": "success",

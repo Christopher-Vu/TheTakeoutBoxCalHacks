@@ -1,11 +1,69 @@
-import React, { useEffect, useRef } from 'react';
+import React, { useEffect, useRef, useState, useCallback } from 'react';
 import mapboxgl from 'mapbox-gl';
 import 'mapbox-gl/dist/mapbox-gl.css';
 import './Map.css';
+import { crimeAPI } from '../utils/api';
 
 const Map = ({ origin, destination, routes }) => {
   const mapContainer = useRef(null);
   const map = useRef(null);
+  const [crimeMarkers, setCrimeMarkers] = useState([]);
+
+  // Function to fetch and display crime markers
+  const fetchCrimeMarkers = useCallback(async () => {
+    if (!map.current) return;
+
+    try {
+      const bounds = map.current.getBounds();
+      const crimesData = await crimeAPI.getRecent24HourCrimes(
+        bounds.getSouth(),
+        bounds.getNorth(),
+        bounds.getWest(),
+        bounds.getEast()
+      );
+
+      // Clear existing crime markers
+      crimeMarkers.forEach(marker => marker.remove());
+      setCrimeMarkers([]);
+
+      // Create new markers for each crime
+      const newMarkers = [];
+      crimesData.crimes.forEach(crime => {
+        const el = document.createElement('div');
+        el.className = 'crime-marker';
+        el.style.width = '20px';
+        el.style.height = '20px';
+        el.style.borderRadius = '50%';
+        el.style.backgroundColor = '#DC3545';
+        el.style.border = '2px solid #fff';
+        el.style.boxShadow = '0 0 8px rgba(220,53,69,0.6)';
+        el.style.cursor = 'pointer';
+
+        const marker = new mapboxgl.Marker(el)
+          .setLngLat([crime.lng, crime.lat])
+          .setPopup(
+            new mapboxgl.Popup({ offset: 25 })
+              .setHTML(`
+                <div style="padding: 8px; min-width: 200px;">
+                  <h4 style="margin: 0 0 8px 0; color: #DC3545;">${crime.crime_type}</h4>
+                  <p style="margin: 4px 0;"><strong>Severity:</strong> ${crime.severity}/10</p>
+                  <p style="margin: 4px 0;"><strong>Time:</strong> ${new Date(crime.occurred_at).toLocaleString()}</p>
+                  <p style="margin: 4px 0;"><strong>Address:</strong> ${crime.address || 'Unknown'}</p>
+                  <p style="margin: 4px 0;"><strong>Agency:</strong> ${crime.agency || 'Unknown'}</p>
+                  ${crime.description ? `<p style="margin: 4px 0;"><strong>Description:</strong> ${crime.description}</p>` : ''}
+                </div>
+              `)
+          )
+          .addTo(map.current);
+
+        newMarkers.push(marker);
+      });
+
+      setCrimeMarkers(newMarkers);
+    } catch (error) {
+      console.error('Error fetching crime markers:', error);
+    }
+  }, [crimeMarkers]);
 
   useEffect(() => {
     if (map.current) return; // Initialize map only once
@@ -22,8 +80,30 @@ const Map = ({ origin, destination, routes }) => {
     map.current.on('load', () => {
       // Add navigation controls
       map.current.addControl(new mapboxgl.NavigationControl());
+      
+      // Fetch initial crime data
+      fetchCrimeMarkers();
     });
-  }, []);
+  }, [fetchCrimeMarkers]);
+
+  // Fetch crime markers when map moves
+  useEffect(() => {
+    if (!map.current) return;
+
+    const handleMoveEnd = () => {
+      fetchCrimeMarkers();
+    };
+
+    map.current.on('moveend', handleMoveEnd);
+    map.current.on('zoomend', handleMoveEnd);
+
+    return () => {
+      if (map.current) {
+        map.current.off('moveend', handleMoveEnd);
+        map.current.off('zoomend', handleMoveEnd);
+      }
+    };
+  }, [fetchCrimeMarkers]);
 
   useEffect(() => {
     if (!map.current || !origin || !destination) return;
