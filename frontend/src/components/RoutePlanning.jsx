@@ -24,6 +24,7 @@ import {
   getSafetyScoreColor,
   getSafetyScoreLabel
 } from '../utils/mockData';
+import { routingAPI } from '../utils/api';
 import AddressAutocomplete from './AddressAutocomplete';
 import './RoutePlanning.css';
 
@@ -45,18 +46,73 @@ const RoutePlanning = () => {
     { id: 'biking', icon: FaBicycle, label: 'Biking' },
   ];
 
-  const handleFindRoutes = () => {
+  // Transform backend route data to UI format
+  const transformBackendRoute = (backendData, routeType = 'balanced') => {
+    // Convert meters to miles
+    const distanceMiles = (backendData.total_distance / 1609.34).toFixed(1);
+
+    // Estimate duration based on distance and travel mode
+    // Walking: ~3 mph, Biking: ~10 mph
+    const speedMph = travelMode === 'walking' ? 3 : 10;
+    const durationMinutes = Math.round((parseFloat(distanceMiles) / speedMph) * 60);
+
+    return {
+      id: routeType,
+      duration: `${durationMinutes} min`,
+      distance: `${distanceMiles} mi`,
+      description: `${routeType.charAt(0).toUpperCase() + routeType.slice(1)} route via crime-aware pathfinding`,
+      safetyScore: Math.round(backendData.total_safety_score),
+      pathCoordinates: backendData.path_coordinates,
+      segments: backendData.segments,
+      crimeZones: backendData.critical_crime_zones || [],
+      crimeData: backendData.crime_density_map || {},
+      safetyBreakdown: backendData.route_safety_breakdown || {}
+    };
+  };
+
+  const handleFindRoutes = async () => {
     if (!selectedOrigin || !selectedDestination) return;
 
     setIsSearching(true);
-    // Simulate API call
-    setTimeout(() => {
+
+    try {
+      console.log('Requesting route from API:', {
+        start: { lat: selectedOrigin.lat, lng: selectedOrigin.lng },
+        end: { lat: selectedDestination.lat, lng: selectedDestination.lng },
+        mode: travelMode
+      });
+
+      // Call the crime-aware routing API
+      const backendData = await routingAPI.getCrimeAwareRoute(
+        selectedOrigin.lat,
+        selectedOrigin.lng,
+        selectedDestination.lat,
+        selectedDestination.lng,
+        'balanced' // Can map travelMode to route_type if needed
+      );
+
+      console.log('Received route from API:', backendData);
+
+      // Transform backend data to UI format
+      const transformedRoute = transformBackendRoute(backendData, 'balanced');
+
+      setRoutes([transformedRoute]);
+      setSelectedRoute(null);
+      setDirections([]);
+
+    } catch (error) {
+      console.error('Error fetching route from API:', error);
+
+      // Fallback to mock data on error
+      console.log('Falling back to mock data...');
       const mockRoutes = generateMockRoutes(selectedOrigin.name, selectedDestination.name, travelMode);
       setRoutes(mockRoutes);
       setSelectedRoute(null);
       setDirections([]);
+
+    } finally {
       setIsSearching(false);
-    }, 1000);
+    }
   };
 
   const handleOriginSelect = (location) => {

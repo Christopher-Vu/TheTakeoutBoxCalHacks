@@ -1,0 +1,21 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(tree:*)",
+      "Bash(netstat:*)",
+      "Bash(findstr:*)",
+      "Bash(curl:*)",
+      "Bash(python -m json.tool:*)",
+      "Bash(timeout 5 curl:*)",
+      "Bash(dir:*)",
+      "Bash(python test_api.py:*)",
+      "Bash(python -c:*)",
+      "Bash(venv\\Scripts\\python.exe:*)",
+      "Bash(.\\venv\\Scripts\\python.exe:*)",
+      "Bash(python:*)",
+      "Bash(tasklist /FI \"PID eq 18240\" /FO LIST)"
+    ],
+    "deny": [],
+    "ask": []
+  }
+}
