@@ -50,26 +50,24 @@ const RoutePlanning = () => {
   ];
 
   // Transform backend route data to UI format
-  const transformBackendRoute = (backendData, routeType = 'balanced') => {
+  const transformBackendRoute = (routeData, routeType) => {
     // Convert meters to miles
-    const distanceMiles = (backendData.total_distance / 1609.34).toFixed(1);
+    const distanceMiles = (routeData.total_distance / 1609.34).toFixed(1);
 
-    // Estimate duration based on distance and travel mode
-    // Walking: ~3 mph, Biking: ~10 mph
-    const speedMph = travelMode === 'walking' ? 3 : 10;
-    const durationMinutes = Math.round((parseFloat(distanceMiles) / speedMph) * 60);
+    // Convert seconds to minutes
+    const durationMinutes = Math.round(routeData.total_duration / 60);
 
     return {
       id: routeType,
       duration: `${durationMinutes} min`,
       distance: `${distanceMiles} mi`,
-      description: `${routeType.charAt(0).toUpperCase() + routeType.slice(1)} route via crime-aware pathfinding`,
-      safetyScore: Math.round(backendData.total_safety_score),
-      pathCoordinates: backendData.path_coordinates,
-      segments: backendData.segments,
-      crimeZones: backendData.critical_crime_zones || [],
-      crimeData: backendData.crime_density_map || {},
-      safetyBreakdown: backendData.route_safety_breakdown || {}
+      description: `${routeType.charAt(0).toUpperCase() + routeType.slice(1)} route`,
+      safetyScore: Math.round(routeData.total_safety_score),
+      pathCoordinates: routeData.path_coordinates,
+      segments: routeData.segments,
+      crimeZones: routeData.critical_crime_zones || [],
+      crimeData: {},
+      safetyBreakdown: {}
     };
   };
 
@@ -85,21 +83,26 @@ const RoutePlanning = () => {
         mode: travelMode
       });
 
-      // Call the crime-aware routing API
+      // Call the crime-aware routing API (now returns both fastest and safest)
       const backendData = await routingAPI.getCrimeAwareRoute(
         selectedOrigin.lat,
         selectedOrigin.lng,
         selectedDestination.lat,
         selectedDestination.lng,
-        'balanced' // Can map travelMode to route_type if needed
+        'balanced'
       );
 
-      console.log('Received route from API:', backendData);
+      console.log('Received routes from API:', backendData);
 
-      // Transform backend data to UI format
-      const transformedRoute = transformBackendRoute(backendData, 'balanced');
+      // Transform both routes to UI format
+      const fastestRoute = transformBackendRoute(backendData.fastest_route, 'fastest');
+      const safestRoute = transformBackendRoute(backendData.safest_route, 'safest');
 
-      setRoutes([transformedRoute]);
+      // Add comparison data
+      const comparison = backendData.comparison;
+      console.log('Route comparison:', comparison);
+
+      setRoutes([fastestRoute, safestRoute]);
       setSelectedRoute(null);
       setDirections([]);
 

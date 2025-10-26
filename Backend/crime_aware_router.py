@@ -14,9 +14,19 @@ import sys
 import os
 import asyncpg
 from sqlalchemy import create_engine, text
+import requests
+import logging
+from typing import Optional
 
 # Add current directory to path for imports
 sys.path.append(os.path.dirname(os.path.abspath(__file__)))
+
+# Set up logging
+logger = logging.getLogger(__name__)
+
+# Mapbox configuration
+MAPBOX_ACCESS_TOKEN = os.getenv('MAPBOX_ACCESS_TOKEN', 'your_mapbox_token_here')
+MAPBOX_DIRECTIONS_URL = 'https://api.mapbox.com/directions/v5/mapbox'
 
 @dataclass
 class CrimePoint:
@@ -93,46 +103,117 @@ class CrimeAwareRouter:
         # Distance influence radius (meters) - reduced to 100m
         self.crime_influence_radius = 100  # 100m radius
         
+        # Mapbox configuration
+        self.mapbox_token = MAPBOX_ACCESS_TOKEN
+        self.max_waypoints = 25  # Mapbox limit
+        
     async def find_optimal_route(self, start_lat: float, start_lng: float,
                                 end_lat: float, end_lng: float,
-                                route_type: str = 'balanced') -> SafetyRoute:
-        """Find optimal route using Dijkstra with crime data"""
-        
-        # Generate waypoints for routing
-        waypoints = self._generate_waypoints(start_lat, start_lng, end_lat, end_lng, num_points=50)
+                                route_type: str = 'balanced') -> Dict[str, Any]:
+        """Find both fastest and safest routes for comparison"""
         
         # Get crime data for the area
+        buffer = 0.01  # ~1km buffer
         crime_data = await self._get_crime_data_for_area(
-            start_lat, start_lng, end_lat, end_lng
+            min(start_lat, end_lat) - buffer,
+            min(start_lng, end_lng) - buffer,
+            max(start_lat, end_lat) + buffer,
+            max(start_lng, end_lng) + buffer
         )
         
-        # Build graph with crime-weighted edges
-        graph = self._build_crime_weighted_graph(waypoints, crime_data)
+        # 1. Get FASTEST route (direct, no crime avoidance)
+        fastest_waypoints = [(start_lng, start_lat), (end_lng, end_lat)]
+        fastest_response = await self._get_mapbox_route(fastest_waypoints, profile='walking')
         
-        # Run Dijkstra
-        if route_type == 'safest':
-            path = self._dijkstra_safest(graph, 0, len(waypoints) - 1)
-        elif route_type == 'fastest':
-            path = self._dijkstra_fastest(graph, 0, len(waypoints) - 1)
-        else:  # balanced
-            path = self._dijkstra_balanced(graph, 0, len(waypoints) - 1)
+        if not fastest_response:
+            raise Exception("Failed to get fastest route from Mapbox")
         
-        # Convert path to route segments
-        route_segments = self._path_to_segments(path, waypoints, crime_data)
+        # 2. Get SAFEST route (crime-aware waypoints)
+        safest_waypoints = await self._get_crime_aware_waypoints(
+            start_lat, start_lng, end_lat, end_lng, crime_data
+        )
+        safest_response = await self._get_mapbox_route(safest_waypoints, profile='walking')
+        
+        if not safest_response:
+            raise Exception("Failed to get safest route from Mapbox")
+        
+        # Build both routes
+        fastest_route = self._build_route_from_response(fastest_response, crime_data, 'fastest')
+        safest_route = self._build_route_from_response(safest_response, crime_data, 'safest')
+        
+        # Calculate comparison metrics
+        time_diff_seconds = safest_response['routes'][0]['duration'] - fastest_response['routes'][0]['duration']
+        distance_diff_meters = safest_route['total_distance'] - fastest_route['total_distance']
+        safety_improvement = safest_route['total_safety_score'] - fastest_route['total_safety_score']
+        
+        return {
+            'fastest_route': fastest_route,
+            'safest_route': safest_route,
+            'comparison': {
+                'time_difference_seconds': round(time_diff_seconds, 1),
+                'time_difference_minutes': round(time_diff_seconds / 60, 1),
+                'distance_difference_meters': round(distance_diff_meters, 1),
+                'distance_difference_percent': round((distance_diff_meters / fastest_route['total_distance']) * 100, 1),
+                'safety_improvement': round(safety_improvement, 1),
+                'safety_improvement_percent': round((safety_improvement / max(fastest_route['total_safety_score'], 0.1)) * 100, 1)
+            }
+        }
+    
+    def _build_route_from_response(self, mapbox_response: dict, crime_data: List[CrimePoint], route_type: str) -> Dict[str, Any]:
+        """Build route data from Mapbox response"""
+        # Parse route coordinates
+        path_coordinates = self._parse_mapbox_route(mapbox_response)
+        
+        if not path_coordinates:
+            raise Exception("No route found")
         
         # Calculate route metrics
-        total_distance = sum(seg.distance for seg in route_segments)
-        total_safety = sum(seg.safety_score for seg in route_segments) / len(route_segments)
-        total_penalty = sum(seg.crime_density for seg in route_segments)
+        segments = self._create_route_segments(path_coordinates, crime_data)
         
-        return SafetyRoute(
-            segments=route_segments,
-            total_distance=total_distance,
-            total_safety_score=total_safety,
-            total_crime_penalty=total_penalty,
-            route_type=route_type,
-            path_coordinates=[(waypoints[i][0], waypoints[i][1]) for i in path]
-        )
+        # Calculate totals
+        total_distance = mapbox_response['routes'][0]['distance']  # meters
+        total_duration = mapbox_response['routes'][0]['duration']  # seconds
+        total_safety_score = sum(seg.safety_score * seg.distance for seg in segments) / total_distance if total_distance > 0 else 0
+        total_crime_penalty = sum(self._calculate_segment_crime_penalty(
+            seg.start_lat, seg.start_lng, seg.end_lat, seg.end_lng, crime_data
+        ) for seg in segments)
+        
+        # Get critical crime zones
+        critical_crimes = [
+            {
+                'lat': crime.lat,
+                'lng': crime.lng,
+                'crime_type': crime.crime_type,
+                'severity': crime.severity,
+                'hours_ago': crime.hours_ago
+            }
+            for crime in crime_data 
+            if crime.hours_ago <= 24 and crime.severity >= 7
+        ]
+        
+        return {
+            'route_type': route_type,
+            'total_distance': total_distance,
+            'total_duration': total_duration,
+            'total_safety_score': total_safety_score,
+            'total_crime_penalty': total_crime_penalty,
+            'path_coordinates': [(coord[0], coord[1]) for coord in path_coordinates],
+            'segments': [
+                {
+                    'start_lat': seg.start_lat,
+                    'start_lng': seg.start_lng,
+                    'end_lat': seg.end_lat,
+                    'end_lng': seg.end_lng,
+                    'distance': seg.distance,
+                    'safety_score': seg.safety_score,
+                    'crime_density': seg.crime_density,
+                    'high_severity_crimes': seg.high_severity_crimes,
+                    'recent_crimes': seg.recent_crimes
+                }
+                for seg in segments
+            ],
+            'critical_crime_zones': critical_crimes[:20]  # Limit to 20 most critical
+        }
     
     def _generate_waypoints(self, start_lat: float, start_lng: float,
                            end_lat: float, end_lng: float, num_points: int = 50) -> List[Tuple[float, float]]:
@@ -198,6 +279,150 @@ class CrimeAwareRouter:
                 ))
             
             return crimes
+    
+    async def _get_crime_aware_waypoints(self, start_lat: float, start_lng: float,
+                                         end_lat: float, end_lng: float,
+                                         crime_data: List[CrimePoint]) -> List[Tuple[float, float]]:
+        """
+        Generate waypoints that avoid high-crime areas.
+        Returns list of (lng, lat) tuples for Mapbox API.
+        """
+        waypoints = [(start_lng, start_lat)]
+        
+        # Find critical crime zones (24-hour crimes with high severity)
+        critical_zones = [
+            crime for crime in crime_data 
+            if crime.hours_ago <= 24 and crime.severity >= 7
+        ]
+        
+        # If there are critical zones, add avoidance waypoints
+        if critical_zones and len(critical_zones) < 10:
+            # Create a simple path that avoids the most dangerous areas
+            mid_lat = (start_lat + end_lat) / 2
+            mid_lng = (start_lng + end_lng) / 2
+            
+            # Check if middle point is safe
+            is_safe = True
+            for crime in critical_zones:
+                dist = self._calculate_distance(mid_lat, mid_lng, crime.lat, crime.lng)
+                if dist < 200:  # Within 200m of critical crime
+                    is_safe = False
+                    break
+            
+            if not is_safe:
+                # Add offset waypoint to avoid the area
+                offset_lat = mid_lat + (0.002 if start_lat < end_lat else -0.002)
+                offset_lng = mid_lng + (0.002 if start_lng < end_lng else -0.002)
+                waypoints.append((offset_lng, offset_lat))
+        
+        waypoints.append((end_lng, end_lat))
+        return waypoints
+    
+    async def _get_mapbox_route(self, waypoints: List[Tuple[float, float]], 
+                               profile: str = 'walking') -> Optional[dict]:
+        """
+        Get route from Mapbox Directions API.
+        
+        Args:
+            waypoints: List of (lng, lat) tuples
+            profile: 'walking', 'cycling', or 'driving'
+        
+        Returns:
+            Mapbox route response or None
+        """
+        # Format waypoints for Mapbox API
+        coordinates = ';'.join([f"{lng},{lat}" for lng, lat in waypoints])
+        
+        # Build API URL
+        url = f"{MAPBOX_DIRECTIONS_URL}/{profile}/{coordinates}"
+        
+        params = {
+            'access_token': self.mapbox_token,
+            'geometries': 'geojson',
+            'overview': 'full',
+            'steps': 'true',
+            'alternatives': 'false'
+        }
+        
+        try:
+            # Make async HTTP request
+            loop = asyncio.get_event_loop()
+            response = await loop.run_in_executor(
+                None, 
+                lambda: requests.get(url, params=params, timeout=10)
+            )
+            
+            if response.status_code == 200:
+                return response.json()
+            else:
+                logger.error(f"Mapbox API error: {response.status_code} - {response.text}")
+                return None
+        except Exception as e:
+            logger.error(f"Mapbox API request failed: {e}")
+            return None
+    
+    def _parse_mapbox_route(self, mapbox_response: dict) -> List[List[float]]:
+        """
+        Extract coordinates from Mapbox response.
+        
+        Returns:
+            List of [lat, lng] coordinates
+        """
+        if not mapbox_response or 'routes' not in mapbox_response:
+            return []
+        
+        route = mapbox_response['routes'][0]
+        geometry = route['geometry']
+        
+        # Convert [lng, lat] to [lat, lng]
+        coordinates = [[coord[1], coord[0]] for coord in geometry['coordinates']]
+        
+        return coordinates
+    
+    def _create_route_segments(self, path_coordinates: List[List[float]], 
+                              crime_data: List[CrimePoint]) -> List[RouteSegment]:
+        """Create route segments from path coordinates"""
+        segments = []
+        
+        for i in range(len(path_coordinates) - 1):
+            start_lat, start_lng = path_coordinates[i]
+            end_lat, end_lng = path_coordinates[i + 1]
+            
+            distance = self._calculate_distance(start_lat, start_lng, end_lat, end_lng)
+            segment_crimes = self._get_crimes_near_segment(
+                start_lat, start_lng, end_lat, end_lng, crime_data
+            )
+            
+            # Calculate metrics
+            crime_density = len(segment_crimes) / max(distance / 1000, 0.001)
+            high_severity_crimes = sum(1 for c in segment_crimes if c.severity >= 7)
+            recent_crimes = sum(1 for c in segment_crimes if c.hours_ago <= 24)
+            
+            safety_score = 100.0
+            if segment_crimes:
+                penalty = min(100, crime_density * 10 + high_severity_crimes * 20 + recent_crimes * 30)
+                safety_score = max(0, 100 - penalty)
+            
+            hours_to_nearest_crime = min((c.hours_ago for c in segment_crimes), default=999.0)
+            crime_density_score = min(1.0, crime_density / 10.0)
+            edge_weight = distance + self._calculate_segment_crime_penalty(
+                start_lat, start_lng, end_lat, end_lng, crime_data
+            )
+            
+            segments.append(RouteSegment(
+                start_lat=start_lat, start_lng=start_lng,
+                end_lat=end_lat, end_lng=end_lng,
+                distance=distance, safety_score=safety_score,
+                crime_density=crime_density,
+                high_severity_crimes=high_severity_crimes,
+                recent_crimes=recent_crimes,
+                critical_crimes_24h=recent_crimes,
+                hours_to_nearest_crime=hours_to_nearest_crime,
+                crime_density_score=crime_density_score,
+                edge_weight=edge_weight
+            ))
+        
+        return segments
     
     def _build_crime_weighted_graph(self, waypoints: List[Tuple[float, float]], 
                                    crime_data: List[CrimePoint]) -> Dict[int, List[Tuple[int, float]]]:

@@ -49,6 +49,7 @@ services:
       - "8000:8000"
     environment:
       - DATABASE_URL=postgresql://postgres:password@postgres:5432/safepath_spatial
+      - MAPBOX_ACCESS_TOKEN=pk.eyJ1IjoiYW5keXltYW9vIiwiYSI6ImNtaDYzMGhrdzA4dnAya29vbW4wcHZ6ODEifQ.NNhIooCa7yGJzYEegxEdAw
     depends_on:
       init-db:
         condition: service_completed_successfully

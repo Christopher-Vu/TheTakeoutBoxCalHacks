@@ -640,56 +640,19 @@ async def get_crime_aware_route(
     end_lng: float = Query(..., description="End longitude"),
     route_type: str = Query("balanced", description="Route type: safest, fastest, or balanced")
 ):
-    """Get crime-aware route using Dijkstra algorithm with crime data"""
+    """Get both fastest and safest crime-aware routes for comparison"""
     if not crime_router:
         raise HTTPException(status_code=503, detail="Crime-aware router not available")
     
     try:
-        route = await crime_router.find_optimal_route(
+        # Get both routes (fastest and safest)
+        result = await crime_router.find_optimal_route(
             start_lat, start_lng, end_lat, end_lng, route_type
         )
         
-        # Get additional crime density data
-        crime_density_data = await crime_router.get_crime_density_heatmap(
-            start_lat, start_lng, end_lat, end_lng
-        )
+        # Result now contains: fastest_route, safest_route, and comparison
+        return result
         
-        # Get blocked areas (24-hour crimes)
-        blocked_areas = await crime_router.get_blocked_areas(
-            start_lat, start_lng, end_lat, end_lng
-        )
-        
-        # Get route safety breakdown
-        safety_breakdown = crime_router.get_route_safety_breakdown(route)
-        
-        # Convert to API response format
-        return {
-            "route_type": route.route_type,
-            "total_distance": route.total_distance,
-            "total_safety_score": route.total_safety_score,
-            "total_crime_penalty": route.total_crime_penalty,
-            "path_coordinates": route.path_coordinates,
-            "crime_density_map": crime_density_data,
-            "critical_crime_zones": blocked_areas,
-            "route_safety_breakdown": safety_breakdown,
-            "segments": [
-                {
-                    "start_lat": seg.start_lat,
-                    "start_lng": seg.start_lng,
-                    "end_lat": seg.end_lat,
-                    "end_lng": seg.end_lng,
-                    "distance": seg.distance,
-                    "safety_score": seg.safety_score,
-                    "crime_density": seg.crime_density,
-                    "high_severity_crimes": seg.high_severity_crimes,
-                    "recent_crimes": seg.recent_crimes,
-                    "critical_crimes_24h": seg.critical_crimes_24h,
-                    "hours_to_nearest_crime": seg.hours_to_nearest_crime,
-                    "crime_density_score": seg.crime_density_score
-                }
-                for seg in route.segments
-            ]
-        }
     except Exception as e:
         logger.error(f"Error finding crime-aware route: {e}")
         raise HTTPException(status_code=500, detail=str(e))
