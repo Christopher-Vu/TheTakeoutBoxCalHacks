@@ -131,6 +131,51 @@
   animation: slideInLeft 0.5s ease-out;
 }
 
+/* Route Header */
+.route-header {
+  padding: var(--spacing-lg);
+  border-bottom: 1px solid var(--border);
+  background: var(--surface);
+  position: sticky;
+  top: 0;
+  z-index: 100;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start !important;
+}
+
+.btn-back {
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-sm);
+  background: none;
+  border: none;
+  color: var(--text-secondary);
+  font-size: var(--font-size-sm);
+  cursor: pointer;
+  transition: color var(--transition-base);
+  margin-bottom: var(--spacing-md);
+  padding: var(--spacing-sm) 0;
+}
+
+.btn-back:hover {
+  color: var(--primary);
+}
+
+.route-header h1 {
+  font-size: var(--font-size-2xl);
+  margin: 0 0 var(--spacing-sm) 0;
+  color: var(--text-primary);
+  font-weight: 700;
+}
+
+.route-subtitle {
+  color: var(--text-secondary);
+  font-size: var(--font-size-sm);
+  margin: 0;
+  line-height: 1.5;
+}
+
 .sidebar-header {
   padding: var(--spacing-lg);
   border-bottom: 1px solid var(--border);
@@ -146,7 +191,8 @@
 }
 
 .route-inputs {
-  padding: var(--spacing-lg);
+  padding-left: var(--spacing-lg);
+  padding-right: var(--spacing-lg);
   display: flex;
   flex-direction: column;
   gap: var(--spacing-md);

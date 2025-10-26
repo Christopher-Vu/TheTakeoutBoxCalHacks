@@ -152,6 +152,14 @@ const RoutePlanning = () => {
   return (
     <div className="route-planning-page">
       <aside className="route-sidebar">
+        <div className="route-header">
+          <button className="btn-back" onClick={() => navigate('/')}>
+            <FaArrowLeft /> Back to Home
+          </button>
+          <h1>Find Routes</h1>
+          <p className="route-subtitle">Plan your journey with maximum safety in mind</p>
+        </div>
+
         <div className="route-inputs">
           <AddressAutocomplete
             placeholder="Starting location"
